@@ -19,13 +19,15 @@
 // LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 
-package frame
+package frame_test
 
 import (
 	"bytes"
 	"encoding/binary"
 	"errors"
 	"fmt"
+
+	"github.com/johnknl/frame"
 )
 
 const exampleHeaderSize = 16
@@ -63,8 +65,8 @@ func ExampleScanner() {
 		binary.BigEndian.PutUint32(h[0:4], uint32(len(payload)))
 		binary.BigEndian.PutUint32(h[4:8], index)
 
-		f := &Frame[exampleHeader]{Header: h, Payload: payload}
-		crc := NewCRC32C[exampleHeader]()
+		f := &frame.Frame[exampleHeader]{Header: h, Payload: payload}
+		crc := frame.NewCRC32C[exampleHeader]()
 		h.setChecksum(crc.Sum(f))
 
 		out := make([]byte, 0, exampleHeaderSize+len(payload))
@@ -79,12 +81,12 @@ func ExampleScanner() {
 	raw = append(raw, encode(1, []byte("bc"))...)
 
 	stream := bytes.NewReader(raw)
-	pool := NewPool[exampleHeader](16, 256)
-	reader := NewReader(stream, pool, ^uint32(0))
+	pool := frame.NewPool[exampleHeader](16, 256)
+	reader := frame.NewReader(stream, pool, frame.MaxPayloadSize)
 
-	scanner := NewScanner(
+	scanner := frame.NewScanner(
 		reader,
-		WithScannerValidator[exampleHeader](NewCRC32C[exampleHeader]()),
+		frame.WithScannerValidator[exampleHeader](frame.NewCRC32C[exampleHeader]()),
 	)
 	defer scanner.Close()
 
@@ -103,16 +105,18 @@ func ExampleScanner() {
 	// err true count 2
 }
 
-// ExampleNewScanner_withOptions shows configuring scanner start offset, start index,
-// and optional validation.
+// ExampleNewScanner_withOptions shows scanner configuration via functional options.
+//
+// This pattern is useful when resuming from a known position in an append-only file,
+// such as after a checkpoint.
 func ExampleNewScanner_withOptions() {
 	encode := func(index uint32, payload []byte) []byte {
 		var h exampleHeader
 		binary.BigEndian.PutUint32(h[0:4], uint32(len(payload)))
 		binary.BigEndian.PutUint32(h[4:8], index)
 
-		f := &Frame[exampleHeader]{Header: h, Payload: payload}
-		crc := NewCRC32C[exampleHeader]()
+		f := &frame.Frame[exampleHeader]{Header: h, Payload: payload}
+		crc := frame.NewCRC32C[exampleHeader]()
 		h.setChecksum(crc.Sum(f))
 
 		out := make([]byte, 0, exampleHeaderSize+len(payload))
@@ -128,15 +132,15 @@ func ExampleNewScanner_withOptions() {
 	raw = append(raw, encode(12, []byte("cc"))...)
 
 	stream := bytes.NewReader(raw)
-	pool := NewPool[exampleHeader](16, 256)
-	reader := NewReader(stream, pool, ^uint32(0))
+	pool := frame.NewPool[exampleHeader](16, 256)
+	reader := frame.NewReader(stream, pool, frame.MaxPayloadSize)
 
 	startOffset := int64(exampleHeaderSize + 2)
-	scanner := NewScanner(
+	scanner := frame.NewScanner(
 		reader,
-		WithScannerOffset[exampleHeader](startOffset),
-		WithScannerIndex[exampleHeader](11),
-		WithScannerValidator[exampleHeader](NewCRC32C[exampleHeader]()),
+		frame.WithScannerOffset[exampleHeader](startOffset),
+		frame.WithScannerIndex[exampleHeader](11),
+		frame.WithScannerValidator[exampleHeader](frame.NewCRC32C[exampleHeader]()),
 	)
 	defer scanner.Close()
 
@@ -160,19 +164,19 @@ func ExampleNewScanner_withOptions() {
 func ExampleScanner_Close() {
 	raw := encodeRaw(0, []byte("x"))
 	stream := bytes.NewReader(raw)
-	pool := NewPool[exampleHeader](16, 256)
-	reader := NewReader(stream, pool, ^uint32(0))
+	pool := frame.NewPool[exampleHeader](16, 256)
+	reader := frame.NewReader(stream, pool, frame.HeadersOnly)
 
-	scanner := NewScanner(reader)
+	scanner := frame.NewScanner(reader)
 	if scanner.Scan() {
-		fmt.Println(string(scanner.Frame().Payload))
+		fmt.Println(len(scanner.Frame().Payload))
 	}
 
 	scanner.Close()
 	fmt.Println(scanner.Frame() == nil)
 
 	// Output:
-	// x
+	// 0
 	// true
 }
 
@@ -181,18 +185,18 @@ func ExampleScanner_Close() {
 // Payload slices are reset when a frame is returned, allowing
 // callers to reuse allocations across reads and writes.
 func ExampleNewPool() {
-	pool := NewPool[exampleHeader](64, 1024)
+	pool := frame.NewPool[exampleHeader](64, 1024)
 	payload := []byte("ok")
 	var h exampleHeader
 	binary.BigEndian.PutUint32(h[0:4], uint32(len(payload)))
 	binary.BigEndian.PutUint32(h[4:8], 0)
 
-	f := pool.Get()
+	f := pool.Get(uint32(len(payload)))
 	f.Set(h, payload)
 	fmt.Println(len(f.Payload), cap(f.Payload) >= 2)
 	f.Return()
 
-	g := pool.Get()
+	g := pool.Get(0)
 	fmt.Println(len(g.Payload))
 	g.Return()
 
@@ -211,19 +215,19 @@ func ExampleCRC32C_Validate() {
 	var h exampleHeader
 	binary.BigEndian.PutUint32(h[0:4], uint32(len(payload)))
 	binary.BigEndian.PutUint32(h[4:8], 1)
-	f := &Frame[exampleHeader]{
+	f := &frame.Frame[exampleHeader]{
 		Header:  h,
 		Payload: payload,
 	}
 
-	crc := NewCRC32C[exampleHeader]()
+	crc := frame.NewCRC32C[exampleHeader]()
 	h.setChecksum(crc.Sum(f))
 	f.Header = h
 
 	fmt.Println(crc.Validate(f) == nil)
 
 	f.Payload[0] = 'H'
-	fmt.Println(errors.Is(crc.Validate(f), ErrInvalidChecksum))
+	fmt.Println(errors.Is(crc.Validate(f), frame.ErrInvalidChecksum))
 
 	// Output:
 	// true
@@ -235,8 +239,8 @@ func encodeRaw(index uint32, payload []byte) []byte {
 	binary.BigEndian.PutUint32(h[0:4], uint32(len(payload)))
 	binary.BigEndian.PutUint32(h[4:8], index)
 
-	f := &Frame[exampleHeader]{Header: h, Payload: payload}
-	crc := NewCRC32C[exampleHeader]()
+	f := &frame.Frame[exampleHeader]{Header: h, Payload: payload}
+	crc := frame.NewCRC32C[exampleHeader]()
 	h.setChecksum(crc.Sum(f))
 
 	out := make([]byte, 0, exampleHeaderSize+len(payload))

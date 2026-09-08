@@ -58,38 +58,42 @@ func BenchmarkCRC32C_Validate(b *testing.B) {
 	}
 }
 
-func BenchmarkReader_ReadHeader(b *testing.B) {
-	payload := testutil.BenchmarkPayload(1024)
-	raw := buildSingleFrameCorpus(0, payload)
-	r := bytes.NewReader(raw)
-	reader := NewReader(r, NewTestPool(len(payload), len(payload)), ^uint32(0))
-
-	b.SetBytes(int64(TestHeaderSize))
-	b.ResetTimer()
-
-	for range b.N {
-		if _, err := reader.ReadHeader(0); err != nil {
-			b.Fatal(err)
-		}
-	}
-}
-
 func BenchmarkReader_Read(b *testing.B) {
-	payload := testutil.BenchmarkPayload(1024)
-	raw := buildSingleFrameCorpus(0, payload)
-	r := bytes.NewReader(raw)
-	reader := NewReader(r, NewTestPool(len(payload), len(payload)), ^uint32(0))
+	b.Run("full_payload", func(b *testing.B) {
+		payload := testutil.BenchmarkPayload(1024)
+		raw := buildSingleFrameCorpus(0, payload)
+		r := bytes.NewReader(raw)
+		reader := NewReader(r, NewTestPool(len(payload), len(payload)), MaxPayloadSize)
 
-	b.SetBytes(int64(TestHeaderSize + len(payload)))
-	b.ResetTimer()
+		b.SetBytes(int64(TestHeaderSize + len(payload)))
+		b.ResetTimer()
 
-	for range b.N {
-		fr, err := reader.Read(0)
-		if err != nil {
-			b.Fatal(err)
+		for range b.N {
+			fr, err := reader.Read(0)
+			if err != nil {
+				b.Fatal(err)
+			}
+			fr.Return()
 		}
-		fr.Return()
-	}
+	})
+
+	b.Run("header_only_limit_zero", func(b *testing.B) {
+		payload := testutil.BenchmarkPayload(1024)
+		raw := buildSingleFrameCorpus(0, payload)
+		r := bytes.NewReader(raw)
+		reader := NewReader(r, NewTestPool(len(payload), len(payload)), HeadersOnly)
+
+		b.SetBytes(int64(TestHeaderSize))
+		b.ResetTimer()
+
+		for range b.N {
+			fr, err := reader.Read(0)
+			if err != nil {
+				b.Fatal(err)
+			}
+			fr.Return()
+		}
+	})
 }
 
 func BenchmarkScanner_Scan(b *testing.B) {
@@ -118,7 +122,7 @@ func benchScanner(b *testing.B, skip int, validate bool) {
 	startOffset := int64(skip * (TestHeaderSize + scannerPayloadSize))
 	stream := bytes.NewReader(buf)
 	pool := NewTestPool(scannerPayloadSize, scannerPayloadSize)
-	reader := NewReader(stream, pool, ^uint32(0))
+	reader := NewReader(stream, pool, MaxPayloadSize)
 
 	var options []ScannerOption[TestHeader]
 	options = append(options,

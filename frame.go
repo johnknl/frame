@@ -25,9 +25,10 @@ import "bytes"
 
 // Frame is a wrapper around a byte slice that is borrowed from a pool.
 type Frame[HT Header] struct {
-	Header  HT
-	pool    *Pool[HT]
-	Payload []byte
+	Header        HT
+	pool          *Pool[HT]
+	Payload       []byte
+	payloadBucket int
 }
 
 // Clone copies the borrowed value into a new slice and returns it along with the header.
@@ -53,5 +54,9 @@ func (f *Frame[HT]) Set(h HT, p []byte) *Frame[HT] {
 // It should be called exactly once in the same context where the value
 // was obtained, and the value should not be used after calling it.
 func (f *Frame[HT]) Return() {
+	if f.pool == nil {
+		return
+	}
+
 	f.pool.put(f)
 }

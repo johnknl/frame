@@ -48,7 +48,7 @@ func TestScanner_ScanSuccess(t *testing.T) {
 		require.NoError(t, err)
 	}
 
-	r := NewReader(file, NewTestPool(4, 1024), ^uint32(0))
+	r := NewReader(file, NewTestPool(4, 1024), MaxPayloadSize)
 	s := NewScanner(r, WithScannerValidator[TestHeader](NewCRC32C[TestHeader]()))
 
 	count := 0
@@ -83,7 +83,7 @@ func TestScanner_ScanInvalidIndex(t *testing.T) {
 		require.NoError(t, err)
 	}
 
-	r := NewReader(file, NewTestPool(4, 1024), ^uint32(0))
+	r := NewReader(file, NewTestPool(4, 1024), MaxPayloadSize)
 	s := NewScanner(r, WithScannerValidator[TestHeader](NewCRC32C[TestHeader]()))
 
 	require.True(t, s.Scan())
@@ -105,7 +105,7 @@ func TestScanner_CloseReleasesCurrentFrame(t *testing.T) {
 	_, err = file.Write(fr.Payload)
 	require.NoError(t, err)
 
-	r := NewReader(file, NewTestPool(4, 1024), ^uint32(0))
+	r := NewReader(file, NewTestPool(4, 1024), MaxPayloadSize)
 	s := NewScanner(r, WithScannerValidator[TestHeader](NewCRC32C[TestHeader]()))
 
 	require.True(t, s.Scan())
@@ -139,7 +139,7 @@ func TestScanner_ScanFromOffsetUsesFirstIndexAsBaseline(t *testing.T) {
 
 	offset += int64(TestHeaderSize + len(frames[0].Payload))
 
-	r := NewReader(file, NewTestPool(4, 1024), ^uint32(0))
+	r := NewReader(file, NewTestPool(4, 1024), MaxPayloadSize)
 	s := NewScanner(
 		r,
 		WithScannerValidator[TestHeader](NewCRC32C[TestHeader]()),
@@ -175,7 +175,7 @@ func TestScanner_ScanCustomStartIndex(t *testing.T) {
 		require.NoError(t, err)
 	}
 
-	r := NewReader(file, NewTestPool(4, 1024), ^uint32(0))
+	r := NewReader(file, NewTestPool(4, 1024), MaxPayloadSize)
 	s := NewScanner(
 		r,
 		WithScannerValidator[TestHeader](NewCRC32C[TestHeader]()),
@@ -214,7 +214,7 @@ func TestScanner_Seek(t *testing.T) {
 
 	offset += int64(TestHeaderSize + len(frames[0].Payload))
 
-	r := NewReader(file, NewTestPool(4, 1024), ^uint32(0))
+	r := NewReader(file, NewTestPool(4, 1024), MaxPayloadSize)
 	s := NewScanner(r, WithScannerValidator[TestHeader](NewCRC32C[TestHeader]()))
 
 	require.True(t, s.Scan())
@@ -246,7 +246,7 @@ func TestScanner_SeekIOSeekerStyle(t *testing.T) {
 		require.NoError(t, err)
 	}
 
-	r := NewReader(file, NewTestPool(4, 1024), ^uint32(0))
+	r := NewReader(file, NewTestPool(4, 1024), MaxPayloadSize)
 	s := NewScanner(
 		r,
 		WithScannerValidator[TestHeader](NewCRC32C[TestHeader]()),
@@ -288,7 +288,7 @@ func TestScanner_SeekIndex(t *testing.T) {
 		require.NoError(t, err)
 	}
 
-	r := NewReader(file, NewTestPool(4, 1024), ^uint32(0))
+	r := NewReader(file, NewTestPool(4, 1024), MaxPayloadSize)
 	s := NewScanner(r, WithScannerValidator[TestHeader](NewCRC32C[TestHeader]()))
 
 	require.NoError(t, s.SeekIndex(2))

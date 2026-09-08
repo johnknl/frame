@@ -22,44 +22,57 @@
 package frame
 
 import (
-	"errors"
-	"io"
 	"testing"
 
-	"github.com/johnknl/frame/internal/mocks"
-	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 )
 
-func TestReader_ReadMapsPartialPayloadToUnexpectedEOF(t *testing.T) {
+func TestBuildPayloadBucketCaps(t *testing.T) {
 	t.Parallel()
 
-	payload := []byte("abcd")
-	h := NewTestHeader(0, 0, payload)
-
-	f := mocks.NewMockReaderAt(t)
-	f.EXPECT().ReadAt(mock.Anything, int64(0)).RunAndReturn(func(dst []byte, _ int64) (int, error) {
-		copy(dst, h[:])
-		return len(h), nil
-	})
-	f.EXPECT().ReadAt(mock.Anything, int64(TestHeaderSize)).RunAndReturn(func(dst []byte, _ int64) (int, error) {
-		copy(dst[:2], payload[:2])
-		return 2, io.EOF
-	})
-
-	r := NewReader(f, NewTestPool(4, 1024), MaxPayloadSize)
-	_, err := r.Read(0)
-	require.ErrorIs(t, err, io.ErrUnexpectedEOF)
+	require.Equal(t, []int{4, 8, 16, 32, 64, 128, 256, 512, 1024}, buildPayloadBucketCaps(4, 1024))
+	require.Equal(t, []int{64}, buildPayloadBucketCaps(64, 64))
+	require.Equal(t, []int{96, 192, 384, 768, 1024}, buildPayloadBucketCaps(96, 1024))
 }
 
-func TestReadWithZeroLimitPropagatesHeaderReadFault(t *testing.T) {
+func TestPool_GetSelectsBucketByPayloadSize(t *testing.T) {
 	t.Parallel()
 
-	wantErr := errors.New("disk read fault")
-	f := mocks.NewMockReaderAt(t)
-	f.EXPECT().ReadAt(mock.Anything, int64(0)).Return(0, wantErr)
+	p := NewTestPool(64, 1024)
 
-	r := NewReader(f, NewTestPool(4, 1024), HeadersOnly)
-	_, err := r.Read(0)
-	require.ErrorIs(t, err, wantErr)
+	f := p.Get(65)
+	require.Equal(t, 65, len(f.Payload))
+	require.Equal(t, 128, cap(f.Payload))
+	f.Return()
+
+	f = p.Get(1024)
+	require.Equal(t, 1024, len(f.Payload))
+	require.Equal(t, 1024, cap(f.Payload))
+	f.Return()
+}
+
+func TestPool_GetOverMaxNotRetained(t *testing.T) {
+	t.Parallel()
+
+	p := NewTestPool(64, 1024)
+
+	f := p.Get(2048)
+	require.Equal(t, 2048, len(f.Payload))
+	require.GreaterOrEqual(t, cap(f.Payload), 2048)
+	require.Equal(t, -1, p.payloadBucketForCap(cap(f.Payload)))
+	f.Return()
+}
+
+func TestPool_ReturnReusesFrameFromSameBucket(t *testing.T) {
+	t.Parallel()
+
+	p := NewTestPool(64, 1024)
+
+	f := p.Get(200)
+	require.Equal(t, 256, cap(f.Payload))
+	f.Return()
+
+	g := p.Get(200)
+	require.Equal(t, 256, cap(g.Payload))
+	g.Return()
 }

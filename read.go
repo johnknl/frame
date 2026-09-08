@@ -26,52 +26,61 @@ import (
 	"io"
 )
 
+// PayloadReadLimit configures the maximum payload bytes Reader.Read returns.
+type PayloadReadLimit uint32
+
+const (
+	// MaxPayloadSize means "no read limit" when passed to NewReader.
+	MaxPayloadSize = PayloadReadLimit(^uint32(0))
+
+	// HeadersOnly means "read only the header" when passed to NewReader.
+	HeadersOnly = PayloadReadLimit(0)
+)
+
 // Reader is a reader that uses a pool of borrowed values to avoid allocations.
 type Reader[HT Header] struct {
 	stream     io.ReaderAt
 	pool       *Pool[HT]
-	max        uint32
+	header     HT
+	headerView []byte
+	limit      uint32
 	headerSize int
 }
 
 // NewReader creates a new BorrowedFrameReader with the given stream and pool.
 // The limit parameter specifies the maximum number of bytes to read for the payload.
-func NewReader[HT Header](stream io.ReaderAt, pool *Pool[HT], limit uint32) *Reader[HT] {
-	return &Reader[HT]{
-		stream:     stream,
-		pool:       pool,
-		max:        limit,
-		headerSize: len(headerBytes(new(HT))),
+func NewReader[HT Header](stream io.ReaderAt, pool *Pool[HT], limit PayloadReadLimit) *Reader[HT] {
+	r := &Reader[HT]{
+		stream: stream,
+		pool:   pool,
+		limit:  uint32(limit),
 	}
+	r.headerSize = len(r.header)
+	r.headerView = headerBytes(&r.header)
+
+	return r
 }
 
 // Read reads the frame header and payload at the given offset,
 // and returns a borrowed value from the pool.
 func (r *Reader[HT]) Read(offset int64) (f *Frame[HT], err error) {
+	err = readAt(r.stream, r.headerView, offset)
+	if err != nil {
+		return nil, err
+	}
+
+	n := min(r.header.PayloadLength(), r.limit)
+	f = r.pool.Get(n)
+	f.Header = r.header
+
 	defer func() {
 		if err != nil && f != nil {
 			f.Return()
 		}
 	}()
 
-	f = r.pool.Get()
-	err = r.readHeaderAt(&f.Header, offset)
-	if err != nil {
-		return nil, err
-	}
-
-	if r.max == 0 {
-		f.Payload = nil
+	if n == 0 {
 		return f, nil
-	}
-
-	n := min(f.Header.PayloadLength(), r.max)
-
-	// Ensure the borrowed payload slice is large enough to hold the payload
-	if uint32(cap(f.Payload)) < n { // #nosec: G115 r.max is uint32
-		f.Payload = make([]byte, n)
-	} else {
-		f.Payload = f.Payload[:n]
 	}
 
 	err = readAt(r.stream, f.Payload, offset+int64(r.headerSize))
@@ -80,21 +89,6 @@ func (r *Reader[HT]) Read(offset int64) (f *Frame[HT], err error) {
 	}
 
 	return f, err
-}
-
-// ReadHeader reads a frame header at offset
-func (r *Reader[HT]) ReadHeader(offset int64) (HT, error) {
-	var h HT
-	err := r.readHeaderAt(&h, offset)
-	if err != nil {
-		return h, err
-	}
-
-	return h, nil
-}
-
-func (r *Reader[HT]) readHeaderAt(h *HT, offset int64) error {
-	return readAt(r.stream, headerBytes(h), offset)
 }
 
 // readAt reads from the file at the given offset into the destination slice

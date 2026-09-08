@@ -1,12 +1,12 @@
 # frame
 
-Generic binary framing utilities.
+Generic utilities for scanning, checksumming and pooling binary frames.
 
 
 ## Header
 
 A concrete Header is the primary way to define a frame format. It is expected to be a fixed-size
-array of bytes, and implement the Header interface which constricts the size to 8, 16, 32 or 64 bytes.
+array of bytes, and implement the Header interface which constrains the size to 8, 16, 32, 64, or 128 bytes.
 
 ```go
 type exampleHeader [16]byte
@@ -45,18 +45,18 @@ Go reference: [NewPool](https://pkg.go.dev/github.com/johnknl/frame#NewPool).
 The following example shows borrowing and returning frames through Pool.
 
 ```go
-pool := NewPool[exampleHeader](64, 1024)
+pool := frame.NewPool[exampleHeader](64, 1024)
 payload := []byte("ok")
 var h exampleHeader
 binary.BigEndian.PutUint32(h[0:4], uint32(len(payload)))
 binary.BigEndian.PutUint32(h[4:8], 0)
 
-f := pool.Get()
+f := pool.Get(uint32(len(payload)))
 f.Set(h, payload)
 fmt.Println(len(f.Payload), cap(f.Payload) >= 2)
 f.Return()
 
-g := pool.Get()
+g := pool.Get(0)
 fmt.Println(len(g.Payload))
 g.Return()
 
@@ -84,19 +84,19 @@ payload := []byte("hello")
 var h exampleHeader
 binary.BigEndian.PutUint32(h[0:4], uint32(len(payload)))
 binary.BigEndian.PutUint32(h[4:8], 1)
-f := &Frame[exampleHeader]{
+f := &frame.Frame[exampleHeader]{
 	Header:  h,
 	Payload: payload,
 }
 
-crc := NewCRC32C[exampleHeader]()
+crc := frame.NewCRC32C[exampleHeader]()
 h.setChecksum(crc.Sum(f))
 f.Header = h
 
 fmt.Println(crc.Validate(f) == nil)
 
 f.Payload[0] = 'H'
-fmt.Println(errors.Is(crc.Validate(f), ErrInvalidChecksum))
+fmt.Println(errors.Is(crc.Validate(f), frame.ErrInvalidChecksum))
 
 // Output:
 // true
@@ -121,8 +121,8 @@ encode := func(index uint32, payload []byte) []byte {
 	binary.BigEndian.PutUint32(h[0:4], uint32(len(payload)))
 	binary.BigEndian.PutUint32(h[4:8], index)
 
-	f := &Frame[exampleHeader]{Header: h, Payload: payload}
-	crc := NewCRC32C[exampleHeader]()
+	f := &frame.Frame[exampleHeader]{Header: h, Payload: payload}
+	crc := frame.NewCRC32C[exampleHeader]()
 	h.setChecksum(crc.Sum(f))
 
 	out := make([]byte, 0, exampleHeaderSize+len(payload))
@@ -137,12 +137,12 @@ raw = append(raw, encode(0, []byte("a"))...)
 raw = append(raw, encode(1, []byte("bc"))...)
 
 stream := bytes.NewReader(raw)
-pool := NewPool[exampleHeader](16, 256)
-reader := NewReader(stream, pool, ^uint32(0))
+pool := frame.NewPool[exampleHeader](16, 256)
+reader := frame.NewReader(stream, pool, frame.MaxPayloadSize)
 
-scanner := NewScanner(
+scanner := frame.NewScanner(
 	reader,
-	WithScannerValidator[exampleHeader](NewCRC32C[exampleHeader]()),
+	frame.WithScannerValidator[exampleHeader](frame.NewCRC32C[exampleHeader]()),
 )
 defer scanner.Close()
 
@@ -167,11 +167,12 @@ fmt.Println("err", scanner.Err() == nil, "count", count)
 
 ### WithOptions
 
-and optional validation.
+This pattern is useful when resuming from a known position in an append-only file,
+such as after a checkpoint.
 
 Go reference: [NewScanner](https://pkg.go.dev/github.com/johnknl/frame#NewScanner).
 
-The following example shows configuring scanner start offset, start index,
+The following example shows scanner configuration via functional options.
 
 ```go
 encode := func(index uint32, payload []byte) []byte {
@@ -179,8 +180,8 @@ encode := func(index uint32, payload []byte) []byte {
 	binary.BigEndian.PutUint32(h[0:4], uint32(len(payload)))
 	binary.BigEndian.PutUint32(h[4:8], index)
 
-	f := &Frame[exampleHeader]{Header: h, Payload: payload}
-	crc := NewCRC32C[exampleHeader]()
+	f := &frame.Frame[exampleHeader]{Header: h, Payload: payload}
+	crc := frame.NewCRC32C[exampleHeader]()
 	h.setChecksum(crc.Sum(f))
 
 	out := make([]byte, 0, exampleHeaderSize+len(payload))
@@ -196,15 +197,15 @@ raw = append(raw, encode(11, []byte("bb"))...)
 raw = append(raw, encode(12, []byte("cc"))...)
 
 stream := bytes.NewReader(raw)
-pool := NewPool[exampleHeader](16, 256)
-reader := NewReader(stream, pool, ^uint32(0))
+pool := frame.NewPool[exampleHeader](16, 256)
+reader := frame.NewReader(stream, pool, frame.MaxPayloadSize)
 
 startOffset := int64(exampleHeaderSize + 2)
-scanner := NewScanner(
+scanner := frame.NewScanner(
 	reader,
-	WithScannerOffset[exampleHeader](startOffset),
-	WithScannerIndex[exampleHeader](11),
-	WithScannerValidator[exampleHeader](NewCRC32C[exampleHeader]()),
+	frame.WithScannerOffset[exampleHeader](startOffset),
+	frame.WithScannerIndex[exampleHeader](11),
+	frame.WithScannerValidator[exampleHeader](frame.NewCRC32C[exampleHeader]()),
 )
 defer scanner.Close()
 
@@ -235,19 +236,19 @@ The following example shows explicit scanner cleanup for early-exit callers.
 ```go
 raw := encodeRaw(0, []byte("x"))
 stream := bytes.NewReader(raw)
-pool := NewPool[exampleHeader](16, 256)
-reader := NewReader(stream, pool, ^uint32(0))
+pool := frame.NewPool[exampleHeader](16, 256)
+reader := frame.NewReader(stream, pool, frame.HeadersOnly)
 
-scanner := NewScanner(reader)
+scanner := frame.NewScanner(reader)
 if scanner.Scan() {
-	fmt.Println(string(scanner.Frame().Payload))
+	fmt.Println(len(scanner.Frame().Payload))
 }
 
 scanner.Close()
 fmt.Println(scanner.Frame() == nil)
 
 // Output:
-// x
+// 0
 // true
 ```
 <!-- EXAMPLE:ExampleScanner_Close:end -->

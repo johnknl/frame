@@ -52,7 +52,8 @@ type IndexedHeader interface {
 }
 
 // headerBytes returns the bytes of the header as a slice.
-// This relies on Header being constrained to fixed-size byte arrays.
+// This does not copy the header, but returns a slice that points to the header in memory.
+// It relies on Header being constrained to fixed-size byte arrays.
 func headerBytes[HT Header](h *HT) []byte {
 	return unsafe.Slice((*byte)(unsafe.Pointer(h)), unsafe.Sizeof(*h)) // #nosec: G103 // see above
 }
