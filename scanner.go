@@ -123,6 +123,105 @@ func (s *Scanner[HT]) Scan() bool {
 	return true
 }
 
+// SeekOffset repositions the scanner to offset and clears the current frame and error.
+// The expected frame index is unchanged.
+func (s *Scanner[HT]) SeekOffset(offset int64) {
+	if s.f != nil {
+		s.f.Return()
+		s.f = nil
+	}
+
+	s.offset = offset
+	s.err = nil
+}
+
+// Seek repositions the scanner using io.Seeker semantics.
+func (s *Scanner[HT]) Seek(offset int64, whence int) (int64, error) {
+	base := int64(0)
+
+	switch whence {
+	case io.SeekStart:
+		base = 0
+	case io.SeekCurrent:
+		base = s.offset
+	default:
+		return 0, errors.New("unsupported whence")
+	}
+
+	next := base + offset
+	if next < 0 {
+		return 0, errors.New("negative offset")
+	}
+
+	s.SeekOffset(next)
+
+	return s.offset, nil
+}
+
+// SeekIndex scans forward from the current offset until index is found.
+// On success, the scanner is positioned so the next Scan reads that frame.
+func (s *Scanner[HT]) SeekIndex(index uint32) error {
+	if s.err != nil {
+		return s.err
+	}
+
+	if s.f != nil {
+		s.f.Return()
+		s.f = nil
+	}
+
+	offset := s.offset
+
+	for {
+		f, err := s.r.Read(offset)
+		if err != nil {
+			if errors.Is(err, io.EOF) {
+				return io.EOF
+			}
+
+			s.err = err
+			return err
+		}
+
+		if s.v != nil {
+			err = s.v.Validate(f)
+			if err != nil {
+				f.Return()
+				s.err = err
+				return err
+			}
+		}
+
+		idx := f.Header.Index()
+		if idx == index {
+			f.Return()
+			s.offset = offset
+			s.nextIdx = index
+			return nil
+		}
+
+		if idx > index {
+			f.Return()
+			s.err = ErrInvalidFrameIndex
+			return s.err
+		}
+
+		offset += int64(s.r.headerSize) + int64(f.Header.PayloadLength())
+		f.Return()
+	}
+}
+
+// Offset returns the scanner's current byte offset.
+// This is the offset where the next Scan starts.
+func (s *Scanner[HT]) Offset() int64 {
+	return s.offset
+}
+
+// Index returns the expected frame index for the next Scan.
+func (s *Scanner[HT]) Index() uint32 {
+	return s.nextIdx
+}
+
 // Frame returns the frame loaded by the most recent successful Scan call.
 func (s *Scanner[HT]) Frame() *Frame[HT] {
 	return s.f

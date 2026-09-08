@@ -23,47 +23,38 @@ package frame
 
 import (
 	"bytes"
-	"fmt"
 	"testing"
 
 	"github.com/johnknl/frame/internal/testutil"
 )
 
 func BenchmarkCRC32C_Sum(b *testing.B) {
-	sizes := []int{64, 1024, 64 * 1024}
-	for _, size := range sizes {
-		b.Run(fmt.Sprintf("payload=%d", size), func(b *testing.B) {
-			payload := testutil.BenchmarkPayload(size)
-			f := NewTestFrame(0, payload)
-			crc := NewCRC32C[TestHeader]()
+	const size = 1024
+	payload := testutil.BenchmarkPayload(size)
+	f := NewTestFrame(0, payload)
+	crc := NewCRC32C[TestHeader]()
 
-			b.SetBytes(int64(size + TestHeaderSize))
-			b.ResetTimer()
+	b.SetBytes(int64(size + TestHeaderSize))
+	b.ResetTimer()
 
-			for range b.N {
-				_ = crc.Sum(f)
-			}
-		})
+	for range b.N {
+		_ = crc.Sum(f)
 	}
 }
 
 func BenchmarkCRC32C_Validate(b *testing.B) {
-	sizes := []int{64, 1024, 64 * 1024}
-	for _, size := range sizes {
-		b.Run(fmt.Sprintf("payload=%d", size), func(b *testing.B) {
-			payload := testutil.BenchmarkPayload(size)
-			f := NewTestFrame(0, payload)
-			crc := NewCRC32C[TestHeader]()
+	const size = 1024
+	payload := testutil.BenchmarkPayload(size)
+	f := NewTestFrame(0, payload)
+	crc := NewCRC32C[TestHeader]()
 
-			b.SetBytes(int64(size + TestHeaderSize))
-			b.ResetTimer()
+	b.SetBytes(int64(size + TestHeaderSize))
+	b.ResetTimer()
 
-			for range b.N {
-				if err := crc.Validate(f); err != nil {
-					b.Fatal(err)
-				}
-			}
-		})
+	for range b.N {
+		if err := crc.Validate(f); err != nil {
+			b.Fatal(err)
+		}
 	}
 }
 
@@ -102,19 +93,17 @@ func BenchmarkReader_Read(b *testing.B) {
 }
 
 func BenchmarkScanner_Scan(b *testing.B) {
-	benchScanner(b, 0, false)
-}
+	b.Run("default", func(b *testing.B) {
+		benchScanner(b, 0, false)
+	})
 
-func BenchmarkScanner_ScanAtOffset(b *testing.B) {
-	benchScanner(b, 256, false)
-}
+	b.Run("with_validation", func(b *testing.B) {
+		benchScanner(b, 0, true)
+	})
 
-func BenchmarkScanner_ScanNoValidation(b *testing.B) {
-	benchScanner(b, 0, false)
-}
-
-func BenchmarkScanner_ScanWithValidation(b *testing.B) {
-	benchScanner(b, 0, true)
+	b.Run("at_offset", func(b *testing.B) {
+		benchScanner(b, 256, false)
+	})
 }
 
 const scannerFrameCount = 1024
@@ -125,7 +114,7 @@ func benchScanner(b *testing.B, skip int, validate bool) {
 		skip = scannerFrameCount
 	}
 
-	buf := buildFrameCorpus(scannerFrameCount, scannerPayloadSize)
+	buf := buildFrameCorpusFrom(scannerFrameCount, scannerPayloadSize, 0)
 	startOffset := int64(skip * (TestHeaderSize + scannerPayloadSize))
 	stream := bytes.NewReader(buf)
 	pool := NewTestPool(scannerPayloadSize, scannerPayloadSize)
@@ -181,12 +170,12 @@ func buildSingleFrameCorpus(index uint32, payload []byte) []byte {
 	return raw
 }
 
-func buildFrameCorpus(frameCount, payloadSize int) []byte {
+func buildFrameCorpusFrom(frameCount, payloadSize int, startIndex uint32) []byte {
 	payload := testutil.BenchmarkPayload(payloadSize)
 	buf := make([]byte, frameCount*(TestHeaderSize+payloadSize))
 	pos := 0
 	for i := range frameCount {
-		fr := NewTestFrame(uint32(i), payload)
+		fr := NewTestFrame(startIndex+uint32(i), payload)
 		for j := range TestHeaderSize {
 			buf[pos+j] = fr.Header[j]
 		}

@@ -22,6 +22,8 @@
 package frame
 
 import (
+	"errors"
+	"io"
 	"os"
 	"path/filepath"
 	"testing"
@@ -186,4 +188,112 @@ func TestScanner_ScanCustomStartIndex(t *testing.T) {
 	require.Equal(t, uint32(11), s.Frame().Header.Index())
 	require.False(t, s.Scan())
 	require.NoError(t, s.Err())
+}
+
+func TestScanner_Seek(t *testing.T) {
+	t.Parallel()
+
+	path := filepath.Join(t.TempDir(), "scan-seek.bin")
+	file, err := os.Create(path)
+	require.NoError(t, err)
+	t.Cleanup(func() { require.NoError(t, file.Close()) })
+
+	frames := []*Frame[TestHeader]{
+		NewTestFrame(0, []byte("a")),
+		NewTestFrame(1, []byte("bb")),
+		NewTestFrame(2, []byte("ccc")),
+	}
+
+	offset := int64(0)
+	for _, fr := range frames {
+		_, err = file.Write(fr.Header[:])
+		require.NoError(t, err)
+		_, err = file.Write(fr.Payload)
+		require.NoError(t, err)
+	}
+
+	offset += int64(TestHeaderSize + len(frames[0].Payload))
+
+	r := NewReader(file, NewTestPool(4, 1024), ^uint32(0))
+	s := NewScanner(r, WithScannerValidator[TestHeader](NewCRC32C[TestHeader]()))
+
+	require.True(t, s.Scan())
+	require.Equal(t, uint32(0), s.Frame().Header.Index())
+
+	s.SeekOffset(offset)
+	require.NoError(t, s.Err())
+	require.True(t, s.Scan())
+	require.Equal(t, uint32(1), s.Frame().Header.Index())
+}
+
+func TestScanner_SeekIOSeekerStyle(t *testing.T) {
+	t.Parallel()
+
+	path := filepath.Join(t.TempDir(), "scan-seek-whence.bin")
+	file, err := os.Create(path)
+	require.NoError(t, err)
+	t.Cleanup(func() { require.NoError(t, file.Close()) })
+
+	frames := []*Frame[TestHeader]{
+		NewTestFrame(0, []byte("a")),
+		NewTestFrame(1, []byte("bb")),
+	}
+
+	for _, fr := range frames {
+		_, err = file.Write(fr.Header[:])
+		require.NoError(t, err)
+		_, err = file.Write(fr.Payload)
+		require.NoError(t, err)
+	}
+
+	r := NewReader(file, NewTestPool(4, 1024), ^uint32(0))
+	s := NewScanner(
+		r,
+		WithScannerValidator[TestHeader](NewCRC32C[TestHeader]()),
+		WithScannerOffset[TestHeader](int64(TestHeaderSize+len(frames[0].Payload))),
+		WithScannerIndex[TestHeader](1),
+	)
+
+	_, err = s.Seek(0, io.SeekStart)
+	require.NoError(t, err)
+	require.NoError(t, s.SeekIndex(0))
+	require.True(t, s.Scan())
+	require.Equal(t, uint32(0), s.Frame().Header.Index())
+
+	_, err = s.Seek(1, io.SeekCurrent)
+	require.NoError(t, err)
+	err = s.SeekIndex(0)
+	require.Error(t, err)
+	require.True(t, errors.Is(err, ErrInvalidFrameIndex) || errors.Is(err, io.EOF) || errors.Is(err, io.ErrUnexpectedEOF))
+}
+
+func TestScanner_SeekIndex(t *testing.T) {
+	t.Parallel()
+
+	path := filepath.Join(t.TempDir(), "scan-seek-index.bin")
+	file, err := os.Create(path)
+	require.NoError(t, err)
+	t.Cleanup(func() { require.NoError(t, file.Close()) })
+
+	frames := []*Frame[TestHeader]{
+		NewTestFrame(0, []byte("a")),
+		NewTestFrame(1, []byte("bb")),
+		NewTestFrame(2, []byte("ccc")),
+	}
+
+	for _, fr := range frames {
+		_, err = file.Write(fr.Header[:])
+		require.NoError(t, err)
+		_, err = file.Write(fr.Payload)
+		require.NoError(t, err)
+	}
+
+	r := NewReader(file, NewTestPool(4, 1024), ^uint32(0))
+	s := NewScanner(r, WithScannerValidator[TestHeader](NewCRC32C[TestHeader]()))
+
+	require.NoError(t, s.SeekIndex(2))
+	require.True(t, s.Scan())
+	require.Equal(t, uint32(2), s.Frame().Header.Index())
+
+	require.ErrorIs(t, s.SeekIndex(9), io.EOF)
 }

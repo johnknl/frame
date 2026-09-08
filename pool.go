@@ -25,6 +25,8 @@ import (
 	"sync"
 )
 
+const poolWarmupSize = 16
+
 // Pool is a pool of borrowed values that can be reused to avoid allocations.
 type Pool[HT Header] struct {
 	pool            sync.Pool
@@ -46,6 +48,11 @@ func NewPool[HT Header](defaultSize, maxRetainedSize int) *Pool[HT] {
 				Payload: make([]byte, 0, defaultSize),
 			}
 		},
+	}
+
+	// minimal warmup to avoid allocations on first use
+	for range poolWarmupSize {
+		p.pool.Put(p.pool.New())
 	}
 
 	return p

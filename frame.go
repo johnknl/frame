@@ -30,12 +30,13 @@ type Frame[HT Header] struct {
 	Payload []byte
 }
 
-// Value copies the borrowed value into a new slice and returns it along with the header.
-func (f *Frame[HT]) Value() (HT, []byte) {
+// Clone copies the borrowed value into a new slice and returns it along with the header.
+// The frame is returned to the pool after cloning so it should not be used afterwards.
+func (f *Frame[HT]) Clone() (HT, []byte) {
 	h := f.Header
 	payload := bytes.Clone(f.Payload)
 
-	f.Return()
+	f.Return() // TODO: this may be a bit unexpected although documented
 
 	return h, payload
 }
