@@ -2,11 +2,82 @@
 
 Generic utilities for scanning, checksumming and pooling binary frames.
 
+## Scanning Performance
+
+`frame` is quite efficient. The pool uses size buckets which are pre-warmed with 
+3 frames each; real-life efficiency will depend on the level of concurrency and 
+how well the payloads fit in the pool buckets. Buckets are derived from caller 
+provided maximum "poolable" payload size.
+
+The following sample benchmarks ran with:
+
+- 16B headers and 128B payloads (144B total data)
+- 1024 frames for the scanner tests
+
+_Note that `frame` scanning is not absolutely zero-allocation as these benchmarks
+seem to suggest: the pool bucket warmup was done outside of the benchmarking to
+isolate per record allocation metrics._
+
+```
+goos: linux
+goarch: amd64
+pkg: github.com/johnknl/frame
+cpu: AMD Ryzen 9 5950X 16-Core Processor
+BenchmarkCRC32C_Sum-32          13765294               104.4 ns/op      9957.88 MB/s          16 B/op          1 allocs/op
+BenchmarkCRC32C_Validate-32     16505458               122.2 ns/op      8510.85 MB/s          16 B/op          1 allocs/op
+BenchmarkReader_Read/full_payload-32            37128774                33.93 ns/op     30647.99 MB/s          0 B/op          0 allocs/op
+BenchmarkReader_Read/header_only_limit_zero-32          53720100                22.44 ns/op      713.12 MB/s           0 B/op          0 allocs/op
+BenchmarkScanner_Scan/default-32                           39490             32282 ns/op        4356.20 MB/s           144.0 bytes/record         31720864 records/s           0 B/op          0 allocs/op
+BenchmarkScanner_Scan/with_validation-32                    8335            131188 ns/op        1071.94 MB/s           144.0 bytes/record          7805635 records/s       16409 B/op       1024 allocs/op
+BenchmarkScanner_Scan/at_offset-32                         49960             24826 ns/op        4248.34 MB/s           144.0 bytes/record         30935500 records/s           0 B/op          0 allocs/op
+PASS
+```
+
+### Scanning Large Streams
+
+`frame` is intended for scanning large streams with frames addressed by logical offset (index).
+
+Seeking by index requires reading each consecutive frame header, hence seeking to the nearest offset
+before the header at the desired index, can have a large impact on performance when dealing with large
+streams.
+
+It does not implement any logical to physical offset index, callers are expected to maintain their
+own (sparse) index at append or load time. This index can then be used to advance the scanner closer 
+to the position of the desired index before seeking by logical offset, eg:
+
+```go
+byteOffset := sparseIndex.Floor(logicalOffset)
+scanner.Seek(byteOffset, io.SeekStart)
+scanner.SeekIndex(logicalOffset)
+
+for scanner.Scan() {
+  frame := scanner.Frame()
+  ...
+}
+```
+
+Example of load-time scanning with integrity check:
+
+```go
+pool := frame.NewPool[exampleHeader](256, 1<<20)
+reader := frame.NewReader(stream, pool, frame.HeadersOnly)
+scanner := frame.NewScanner(
+	reader,
+	frame.WithScannerValidator[exampleHeader](frame.NewCRC32C[exampleHeader]()),
+)
+
+defer scanner.Close()
+
+for scanner.Scan() {
+	sparseIndex.MaybeSet(scanner.Index(), scanner.Offset())
+}
+```
+
 
 ## Header
 
-A concrete Header is the primary way to define a frame format. It is expected to be a fixed-size
-array of bytes, and implement the Header interface which constrains the size to 8, 16, 32, 64, or 128 bytes.
+A concrete Header is the way to define a frame format. It is expected to be a fixed-size array of bytes, 
+and implement the Header interface which constrains the size to 8, 16, 32, 64, or 128 bytes.
 
 ```go
 type exampleHeader [16]byte
@@ -252,3 +323,7 @@ fmt.Println(scanner.Frame() == nil)
 // true
 ```
 <!-- EXAMPLE:ExampleScanner_Close:end -->
+
+## License
+
+MIT
