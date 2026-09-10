@@ -61,8 +61,8 @@ func (h *TestHeader) SetChecksum(c uint32) {
 	binary.BigEndian.PutUint32(h[12:16], c)
 }
 
-func (h TestHeader) ChecksumBytes() []byte {
-	return h[:12]
+func (h TestHeader) ChecksumBytes() int {
+	return 12
 }
 
 // NewTestHeader constructs a new TestHeader

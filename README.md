@@ -23,13 +23,13 @@ goos: linux
 goarch: amd64
 pkg: github.com/johnknl/frame
 cpu: AMD Ryzen 9 5950X 16-Core Processor
-BenchmarkCRC32C_Sum-32          13765294               104.4 ns/op      9957.88 MB/s          16 B/op          1 allocs/op
-BenchmarkCRC32C_Validate-32     16505458               122.2 ns/op      8510.85 MB/s          16 B/op          1 allocs/op
-BenchmarkReader_Read/full_payload-32            37128774                33.93 ns/op     30647.99 MB/s          0 B/op          0 allocs/op
-BenchmarkReader_Read/header_only_limit_zero-32          53720100                22.44 ns/op      713.12 MB/s           0 B/op          0 allocs/op
-BenchmarkScanner_Scan/default-32                           39490             32282 ns/op        4356.20 MB/s           144.0 bytes/record         31720864 records/s           0 B/op          0 allocs/op
-BenchmarkScanner_Scan/with_validation-32                    8335            131188 ns/op        1071.94 MB/s           144.0 bytes/record          7805635 records/s       16409 B/op       1024 allocs/op
-BenchmarkScanner_Scan/at_offset-32                         49960             24826 ns/op        4248.34 MB/s           144.0 bytes/record         30935500 records/s           0 B/op          0 allocs/op
+BenchmarkCRC32C_Sum-32          26552685                47.26 ns/op     22004.15 MB/s          0 B/op          0 allocs/op
+BenchmarkCRC32C_Validate-32     25758903                50.07 ns/op     20771.68 MB/s          0 B/op          0 allocs/op
+BenchmarkReader_Read/full_payload-32            36025234                35.35 ns/op     29423.18 MB/s          0 B/op          0 allocs/op
+BenchmarkReader_Read/header_only_limit_zero-32          55904217                22.90 ns/op      698.55 MB/s           0 B/op          0 allocs/op
+BenchmarkScanner_Scan/default-32                           37875             32604 ns/op        4313.12 MB/s           144.0 bytes/record         31407155 records/s           0 B/op          0 allocs/op
+BenchmarkScanner_Scan/with_validation-32                   21217             56965 ns/op        2468.64 MB/s           144.0 bytes/record         17976106 records/s           0 B/op          0 allocs/op
+BenchmarkScanner_Scan/at_offset-32                         51880             24855 ns/op        4243.32 MB/s           144.0 bytes/record         30898947 records/s           0 B/op          0 allocs/op
 PASS
 ```
 

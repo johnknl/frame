@@ -40,7 +40,7 @@ type Header interface {
 	Checksum() uint32
 
 	// ChecksumBytes returns the bytes of the header that are included for checksumming.
-	ChecksumBytes() []byte
+	ChecksumBytes() int
 }
 
 // IndexedHeader is a header that includes a monotonic frame index.

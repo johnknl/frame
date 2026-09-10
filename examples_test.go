@@ -46,8 +46,8 @@ func (h exampleHeader) Checksum() uint32 {
 	return binary.BigEndian.Uint32(h[12:16])
 }
 
-func (h exampleHeader) ChecksumBytes() []byte {
-	return h[:12]
+func (h exampleHeader) ChecksumBytes() int {
+	return 12
 }
 
 func (h *exampleHeader) setChecksum(sum uint32) {

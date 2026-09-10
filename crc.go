@@ -58,8 +58,14 @@ func (v *CRC32C[HT]) Validate(f *Frame[HT]) error {
 	return nil
 }
 
+// UpdateCRC32C updates the CRC32C checksum with the given bytes.
+func UpdateCRC32C(sum uint32, b []byte) uint32 {
+	return crc32.Update(sum, crc32cTable, b)
+}
+
 // Sum computes the CRC32C checksum for a frame.
 func (v *CRC32C[HT]) Sum(f *Frame[HT]) uint32 {
-	sum := crc32.Update(0, crc32cTable, f.Header.ChecksumBytes())
+	b := headerBytes(&f.Header)
+	sum := crc32.Update(0, crc32cTable, b[:f.Header.ChecksumBytes()])
 	return crc32.Update(sum, crc32cTable, f.Payload)
 }
