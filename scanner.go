@@ -26,6 +26,12 @@ import (
 	"io"
 )
 
+var errSeekWithoutReaderAt = errors.New("seek requires ReaderAt")
+
+type discardReader interface {
+	Discard(n int) (discarded int, err error)
+}
+
 // Validator validates a decoded frame.
 type Validator[HT Header] interface {
 	Validate(f *Frame[HT]) error
@@ -60,6 +66,9 @@ type Scanner[HT IndexedHeader] struct {
 	v       Validator[HT]
 	err     error
 	r       *Reader[HT]
+	ra      *ReaderAt[HT]
+	stream  io.Reader
+	seeker  io.Seeker
 	f       *Frame[HT]
 	offset  int64
 	nextIdx uint32
@@ -67,13 +76,36 @@ type Scanner[HT IndexedHeader] struct {
 
 // NewScanner creates a new scanner using the provided reader and options.
 // Defaults are offset 0, index 0, and no validator.
-func NewScanner[HT IndexedHeader](r *Reader[HT], options ...ScannerOption[HT]) *Scanner[HT] {
+func NewScanner[HT IndexedHeader](
+	stream io.Reader,
+	pool *Pool[HT],
+	limit PayloadReadLimit,
+	options ...ScannerOption[HT],
+) *Scanner[HT] {
 	s := &Scanner[HT]{
-		r: r,
+		r:      NewReader[HT](stream, pool, limit),
+		stream: stream,
+	}
+	if ra, ok := stream.(io.ReaderAt); ok {
+		s.ra = NewReaderAt[HT](ra, pool, limit)
+	}
+	if seeker, ok := stream.(io.Seeker); ok {
+		s.seeker = seeker
 	}
 
 	for _, option := range options {
 		option(s)
+	}
+
+	if s.offset < 0 {
+		s.err = errors.New("negative offset")
+		return s
+	}
+
+	if s.ra == nil && s.offset > 0 {
+		if err := s.seekStreamToOffset(s.offset); err != nil {
+			return s
+		}
 	}
 
 	return s
@@ -90,7 +122,7 @@ func (s *Scanner[HT]) Scan() bool {
 		s.f = nil
 	}
 
-	f, err := s.r.Read(s.offset)
+	f, err := s.readFrameAtOffset(s.offset)
 	if err != nil {
 		if errors.Is(err, io.EOF) {
 			return false
@@ -129,6 +161,18 @@ func (s *Scanner[HT]) SeekOffset(offset int64) {
 	if s.f != nil {
 		s.f.Return()
 		s.f = nil
+	}
+	if offset < 0 {
+		s.err = errors.New("negative offset")
+		return
+	}
+
+	if s.ra == nil {
+		if err := s.seekStreamToOffset(offset); err != nil {
+			return
+		}
+
+		return
 	}
 
 	s.offset = offset
@@ -173,7 +217,7 @@ func (s *Scanner[HT]) SeekIndex(index uint32) error {
 	offset := s.offset
 
 	for {
-		f, err := s.r.Read(offset)
+		f, err := s.readFrameAtOffset(offset)
 		if err != nil {
 			if errors.Is(err, io.EOF) {
 				return io.EOF
@@ -240,4 +284,88 @@ func (s *Scanner[HT]) Close() {
 // Err returns the first non-EOF error encountered by Scan.
 func (s *Scanner[HT]) Err() error {
 	return s.err
+}
+
+func (s *Scanner[HT]) readFrameAtOffset(offset int64) (*Frame[HT], error) {
+	if s.ra != nil {
+		return s.ra.ReadAt(offset)
+	}
+
+	if offset != s.offset {
+		if err := s.seekStreamToOffset(offset); err != nil {
+			return nil, err
+		}
+	}
+
+	return s.r.Read()
+}
+
+func (s *Scanner[HT]) seekStreamToOffset(offset int64) error {
+	if s.seeker != nil {
+		_, err := s.seeker.Seek(offset, io.SeekStart)
+		if err != nil {
+			s.err = err
+			return err
+		}
+
+		s.offset = offset
+		s.err = nil
+		return nil
+	}
+
+	if offset < s.offset {
+		s.err = errSeekWithoutReaderAt
+		return s.err
+	}
+
+	if offset == s.offset {
+		s.err = nil
+		return nil
+	}
+
+	err := discardN(s.stream, offset-s.offset)
+	if err != nil {
+		s.err = err
+		return err
+	}
+
+	s.offset = offset
+	s.err = nil
+
+	return nil
+}
+
+func discardN(stream io.Reader, n int64) error {
+	if n == 0 {
+		return nil
+	}
+
+	if dr, ok := stream.(discardReader); ok {
+		const maxInt = int(^uint(0) >> 1)
+		remaining := n
+
+		for remaining > 0 {
+			chunk := maxInt
+			if remaining < int64(maxInt) {
+				chunk = int(remaining)
+			}
+
+			discarded, err := dr.Discard(chunk)
+			remaining -= int64(discarded)
+
+			if err != nil {
+				return err
+			}
+
+			if discarded == 0 {
+				return io.ErrNoProgress
+			}
+		}
+
+		return nil
+	}
+
+	_, err := io.CopyN(io.Discard, stream, n)
+
+	return err
 }

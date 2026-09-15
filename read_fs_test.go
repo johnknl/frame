@@ -47,8 +47,8 @@ func TestReader_ReadMapsPartialPayloadToUnexpectedEOF(t *testing.T) {
 		return 2, io.EOF
 	})
 
-	r := NewReader(f, NewTestPool(4, 1024), MaxPayloadSize)
-	_, err := r.Read(0)
+	r := NewReaderAt(f, NewTestPool(4, 1024), MaxPayloadSize)
+	_, err := r.ReadAt(0)
 	require.ErrorIs(t, err, io.ErrUnexpectedEOF)
 }
 
@@ -59,7 +59,7 @@ func TestReadWithZeroLimitPropagatesHeaderReadFault(t *testing.T) {
 	f := mocks.NewMockReaderAt(t)
 	f.EXPECT().ReadAt(mock.Anything, int64(0)).Return(0, wantErr)
 
-	r := NewReader(f, NewTestPool(4, 1024), HeadersOnly)
-	_, err := r.Read(0)
+	r := NewReaderAt(f, NewTestPool(4, 1024), HeadersOnly)
+	_, err := r.ReadAt(0)
 	require.ErrorIs(t, err, wantErr)
 }

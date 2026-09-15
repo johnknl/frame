@@ -22,6 +22,7 @@
 package frame
 
 import (
+	"bytes"
 	"errors"
 	"io"
 	"os"
@@ -30,6 +31,22 @@ import (
 
 	"github.com/stretchr/testify/require"
 )
+
+func buildScannerRawFrames(payloads [][]byte, startIndex uint32) []byte {
+	total := 0
+	for _, payload := range payloads {
+		total += TestHeaderSize + len(payload)
+	}
+
+	raw := make([]byte, 0, total)
+	for i, payload := range payloads {
+		f := NewTestFrame(startIndex+uint32(i), payload)
+		raw = append(raw, f.Header[:]...)
+		raw = append(raw, payload...)
+	}
+
+	return raw
+}
 
 func TestScanner_ScanSuccess(t *testing.T) {
 	t.Parallel()
@@ -48,8 +65,8 @@ func TestScanner_ScanSuccess(t *testing.T) {
 		require.NoError(t, err)
 	}
 
-	r := NewReader(file, NewTestPool(4, 1024), MaxPayloadSize)
-	s := NewScanner(r, WithScannerValidator[TestHeader](NewCRC32C[TestHeader]()))
+	pool := NewTestPool(4, 1024)
+	s := NewScanner(file, pool, MaxPayloadSize, WithScannerValidator[TestHeader](NewCRC32C[TestHeader]()))
 
 	count := 0
 	for s.Scan() {
@@ -83,8 +100,8 @@ func TestScanner_ScanInvalidIndex(t *testing.T) {
 		require.NoError(t, err)
 	}
 
-	r := NewReader(file, NewTestPool(4, 1024), MaxPayloadSize)
-	s := NewScanner(r, WithScannerValidator[TestHeader](NewCRC32C[TestHeader]()))
+	pool := NewTestPool(4, 1024)
+	s := NewScanner(file, pool, MaxPayloadSize, WithScannerValidator[TestHeader](NewCRC32C[TestHeader]()))
 
 	require.True(t, s.Scan())
 	require.False(t, s.Scan())
@@ -105,8 +122,8 @@ func TestScanner_CloseReleasesCurrentFrame(t *testing.T) {
 	_, err = file.Write(fr.Payload)
 	require.NoError(t, err)
 
-	r := NewReader(file, NewTestPool(4, 1024), MaxPayloadSize)
-	s := NewScanner(r, WithScannerValidator[TestHeader](NewCRC32C[TestHeader]()))
+	pool := NewTestPool(4, 1024)
+	s := NewScanner(file, pool, MaxPayloadSize, WithScannerValidator[TestHeader](NewCRC32C[TestHeader]()))
 
 	require.True(t, s.Scan())
 	require.NotNil(t, s.Frame())
@@ -139,9 +156,11 @@ func TestScanner_ScanFromOffsetUsesFirstIndexAsBaseline(t *testing.T) {
 
 	offset += int64(TestHeaderSize + len(frames[0].Payload))
 
-	r := NewReader(file, NewTestPool(4, 1024), MaxPayloadSize)
+	pool := NewTestPool(4, 1024)
 	s := NewScanner(
-		r,
+		file,
+		pool,
+		MaxPayloadSize,
 		WithScannerValidator[TestHeader](NewCRC32C[TestHeader]()),
 		WithScannerOffset[TestHeader](offset),
 		WithScannerIndex[TestHeader](1),
@@ -175,9 +194,11 @@ func TestScanner_ScanCustomStartIndex(t *testing.T) {
 		require.NoError(t, err)
 	}
 
-	r := NewReader(file, NewTestPool(4, 1024), MaxPayloadSize)
+	pool := NewTestPool(4, 1024)
 	s := NewScanner(
-		r,
+		file,
+		pool,
+		MaxPayloadSize,
 		WithScannerValidator[TestHeader](NewCRC32C[TestHeader]()),
 		WithScannerIndex[TestHeader](10),
 	)
@@ -214,8 +235,8 @@ func TestScanner_Seek(t *testing.T) {
 
 	offset += int64(TestHeaderSize + len(frames[0].Payload))
 
-	r := NewReader(file, NewTestPool(4, 1024), MaxPayloadSize)
-	s := NewScanner(r, WithScannerValidator[TestHeader](NewCRC32C[TestHeader]()))
+	pool := NewTestPool(4, 1024)
+	s := NewScanner(file, pool, MaxPayloadSize, WithScannerValidator[TestHeader](NewCRC32C[TestHeader]()))
 
 	require.True(t, s.Scan())
 	require.Equal(t, uint32(0), s.Frame().Header.Index())
@@ -246,9 +267,11 @@ func TestScanner_SeekIOSeekerStyle(t *testing.T) {
 		require.NoError(t, err)
 	}
 
-	r := NewReader(file, NewTestPool(4, 1024), MaxPayloadSize)
+	pool := NewTestPool(4, 1024)
 	s := NewScanner(
-		r,
+		file,
+		pool,
+		MaxPayloadSize,
 		WithScannerValidator[TestHeader](NewCRC32C[TestHeader]()),
 		WithScannerOffset[TestHeader](int64(TestHeaderSize+len(frames[0].Payload))),
 		WithScannerIndex[TestHeader](1),
@@ -288,12 +311,47 @@ func TestScanner_SeekIndex(t *testing.T) {
 		require.NoError(t, err)
 	}
 
-	r := NewReader(file, NewTestPool(4, 1024), MaxPayloadSize)
-	s := NewScanner(r, WithScannerValidator[TestHeader](NewCRC32C[TestHeader]()))
+	pool := NewTestPool(4, 1024)
+	s := NewScanner(file, pool, MaxPayloadSize, WithScannerValidator[TestHeader](NewCRC32C[TestHeader]()))
 
 	require.NoError(t, s.SeekIndex(2))
 	require.True(t, s.Scan())
 	require.Equal(t, uint32(2), s.Frame().Header.Index())
 
 	require.ErrorIs(t, s.SeekIndex(9), io.EOF)
+}
+
+func TestScanner_SeekIndexSequentialReaderReadsTargetOnNextScan(t *testing.T) {
+	t.Parallel()
+
+	raw := buildScannerRawFrames([][]byte{[]byte("a"), []byte("bb"), []byte("ccc")}, 0)
+	stream := &readSeekOnly{Reader: bytes.NewReader(raw)}
+	pool := NewTestPool(4, 1024)
+	s := NewScanner(stream, pool, MaxPayloadSize, WithScannerValidator[TestHeader](NewCRC32C[TestHeader]()))
+
+	require.NoError(t, s.SeekIndex(1))
+	require.True(t, s.Scan())
+	require.Equal(t, uint32(1), s.Frame().Header.Index())
+	require.Equal(t, []byte("bb"), s.Frame().Payload)
+}
+
+func TestScanner_SeekIndexSequentialReaderCanContinueAfterTarget(t *testing.T) {
+	t.Parallel()
+
+	raw := buildScannerRawFrames([][]byte{[]byte("a"), []byte("bb"), []byte("ccc")}, 0)
+	stream := &readSeekOnly{Reader: bytes.NewReader(raw)}
+	pool := NewTestPool(4, 1024)
+	s := NewScanner(stream, pool, MaxPayloadSize, WithScannerValidator[TestHeader](NewCRC32C[TestHeader]()))
+
+	require.NoError(t, s.SeekIndex(1))
+	require.True(t, s.Scan())
+	require.Equal(t, uint32(1), s.Frame().Header.Index())
+	require.True(t, s.Scan())
+	require.Equal(t, uint32(2), s.Frame().Header.Index())
+	require.False(t, s.Scan())
+	require.NoError(t, s.Err())
+}
+
+type readSeekOnly struct {
+	*bytes.Reader
 }

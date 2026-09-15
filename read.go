@@ -37,9 +37,9 @@ const (
 	HeadersOnly = PayloadReadLimit(0)
 )
 
-// Reader is a reader that uses a pool of borrowed values to avoid allocations.
-type Reader[HT Header] struct {
-	stream     io.ReaderAt
+// ReaderAt is a reader that uses a pool of borrowed values to avoid allocations.
+type ReaderAt[HT Header] struct {
+	r          io.ReaderAt
 	pool       *Pool[HT]
 	header     HT
 	headerView []byte
@@ -47,13 +47,23 @@ type Reader[HT Header] struct {
 	headerSize int
 }
 
-// NewReader creates a new BorrowedFrameReader with the given stream and pool.
+// Reader is a reader that uses a pool of borrowed values to avoid allocations.
+type Reader[HT Header] struct {
+	r          io.Reader
+	pool       *Pool[HT]
+	header     HT
+	headerView []byte
+	limit      uint32
+	headerSize int
+}
+
+// NewReaderAt creates a new BorrowedFrameReader with the given stream and pool.
 // The limit parameter specifies the maximum number of bytes to read for the payload.
-func NewReader[HT Header](stream io.ReaderAt, pool *Pool[HT], limit PayloadReadLimit) *Reader[HT] {
-	r := &Reader[HT]{
-		stream: stream,
-		pool:   pool,
-		limit:  uint32(limit),
+func NewReaderAt[HT Header](src io.ReaderAt, pool *Pool[HT], limit PayloadReadLimit) *ReaderAt[HT] {
+	r := &ReaderAt[HT]{
+		r:     src,
+		pool:  pool,
+		limit: uint32(limit),
 	}
 	r.headerSize = len(r.header)
 	r.headerView = headerBytes(&r.header)
@@ -61,10 +71,24 @@ func NewReader[HT Header](stream io.ReaderAt, pool *Pool[HT], limit PayloadReadL
 	return r
 }
 
-// Read reads the frame header and payload at the given offset,
+// NewReader creates a new BorrowedFrameReader with the given stream and pool.
+// The limit parameter specifies the maximum number of bytes to read for the payload.
+func NewReader[HT Header](src io.Reader, pool *Pool[HT], limit PayloadReadLimit) *Reader[HT] {
+	r := &Reader[HT]{
+		r:     src,
+		pool:  pool,
+		limit: uint32(limit),
+	}
+	r.headerSize = len(r.header)
+	r.headerView = headerBytes(&r.header)
+
+	return r
+}
+
+// ReadAt reads the frame header and payload at the given offset,
 // and returns a borrowed value from the pool.
-func (r *Reader[HT]) Read(offset int64) (f *Frame[HT], err error) {
-	err = readAt(r.stream, r.headerView, offset)
+func (r *ReaderAt[HT]) ReadAt(offset int64) (f *Frame[HT], err error) {
+	err = readAt(r.r, r.headerView, offset)
 	if err != nil {
 		return nil, err
 	}
@@ -83,12 +107,48 @@ func (r *Reader[HT]) Read(offset int64) (f *Frame[HT], err error) {
 		return f, nil
 	}
 
-	err = readAt(r.stream, f.Payload, offset+int64(r.headerSize))
+	err = readAt(r.r, f.Payload, offset+int64(r.headerSize))
 	if err != nil {
 		return nil, err
 	}
 
 	return f, err
+}
+
+// Read reads the next frame header and payload from the stream,
+// and returns a borrowed value from the pool.
+func (r *Reader[HT]) Read() (f *Frame[HT], err error) {
+	err = readFull(r.r, r.headerView)
+	if err != nil {
+		return nil, err
+	}
+
+	payloadLen := r.header.PayloadLength()
+	n := min(payloadLen, r.limit)
+	f = r.pool.Get(n)
+	f.Header = r.header
+
+	defer func() {
+		if err != nil && f != nil {
+			f.Return()
+		}
+	}()
+
+	if n > 0 {
+		err = readFull(r.r, f.Payload)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	if payloadLen > n {
+		_, err = io.CopyN(io.Discard, r.r, int64(payloadLen-n))
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	return f, nil
 }
 
 // readAt reads from the file at the given offset into the destination slice
@@ -97,6 +157,19 @@ func readAt(stream io.ReaderAt, dst []byte, offset int64) error {
 	if err != nil {
 		if errors.Is(err, io.EOF) && n > 0 {
 			return io.ErrUnexpectedEOF
+		}
+
+		return err
+	}
+
+	return nil
+}
+
+func readFull(stream io.Reader, dst []byte) error {
+	_, err := io.ReadFull(stream, dst)
+	if err != nil {
+		if errors.Is(err, io.EOF) {
+			return io.EOF
 		}
 
 		return err

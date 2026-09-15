@@ -25,8 +25,10 @@ pkg: github.com/johnknl/frame
 cpu: AMD Ryzen 9 5950X 16-Core Processor
 BenchmarkCRC32C_Sum-32          26552685                47.26 ns/op     22004.15 MB/s          0 B/op          0 allocs/op
 BenchmarkCRC32C_Validate-32     25758903                50.07 ns/op     20771.68 MB/s          0 B/op          0 allocs/op
-BenchmarkReader_Read/full_payload-32            36025234                35.35 ns/op     29423.18 MB/s          0 B/op          0 allocs/op
-BenchmarkReader_Read/header_only_limit_zero-32          55904217                22.90 ns/op      698.55 MB/s           0 B/op          0 allocs/op
+BenchmarkReaderAt_ReadAt/full_payload-32              11100940               100.7 ns/op     30982.10 MB/s          0 B/op          0 allocs/op
+BenchmarkReaderAt_ReadAt/header_only_limit_zero-32    16533049                70.92 ns/op      676.81 MB/s          0 B/op          0 allocs/op
+BenchmarkReader_Read/full_payload-32                   9904148               119.0 ns/op     26212.07 MB/s          0 B/op          0 allocs/op
+BenchmarkReader_Read/header_only_limit_zero-32         2506723               480.3 ns/op        99.95 MB/s         72 B/op          3 allocs/op
 BenchmarkScanner_Scan/default-32                           37875             32604 ns/op        4313.12 MB/s           144.0 bytes/record         31407155 records/s           0 B/op          0 allocs/op
 BenchmarkScanner_Scan/with_validation-32                   21217             56965 ns/op        2468.64 MB/s           144.0 bytes/record         17976106 records/s           0 B/op          0 allocs/op
 BenchmarkScanner_Scan/at_offset-32                         51880             24855 ns/op        4243.32 MB/s           144.0 bytes/record         30898947 records/s           0 B/op          0 allocs/op
@@ -60,9 +62,10 @@ Example of load-time scanning with integrity check:
 
 ```go
 pool := frame.NewPool[exampleHeader](256, 1<<20)
-reader := frame.NewReader(stream, pool, frame.HeadersOnly)
 scanner := frame.NewScanner(
-	reader,
+	stream,
+	pool,
+	frame.HeadersOnly,
 	frame.WithScannerValidator[exampleHeader](frame.NewCRC32C[exampleHeader]()),
 )
 
@@ -72,7 +75,6 @@ for scanner.Scan() {
 	sparseIndex.MaybeSet(scanner.Index(), scanner.Offset())
 }
 ```
-
 
 ## Header
 
@@ -209,10 +211,11 @@ raw = append(raw, encode(1, []byte("bc"))...)
 
 stream := bytes.NewReader(raw)
 pool := frame.NewPool[exampleHeader](16, 256)
-reader := frame.NewReader(stream, pool, frame.MaxPayloadSize)
 
 scanner := frame.NewScanner(
-	reader,
+	stream,
+	pool,
+	frame.MaxPayloadSize,
 	frame.WithScannerValidator[exampleHeader](frame.NewCRC32C[exampleHeader]()),
 )
 defer scanner.Close()
@@ -269,11 +272,12 @@ raw = append(raw, encode(12, []byte("cc"))...)
 
 stream := bytes.NewReader(raw)
 pool := frame.NewPool[exampleHeader](16, 256)
-reader := frame.NewReader(stream, pool, frame.MaxPayloadSize)
 
 startOffset := int64(exampleHeaderSize + 2)
 scanner := frame.NewScanner(
-	reader,
+	stream,
+	pool,
+	frame.MaxPayloadSize,
 	frame.WithScannerOffset[exampleHeader](startOffset),
 	frame.WithScannerIndex[exampleHeader](11),
 	frame.WithScannerValidator[exampleHeader](frame.NewCRC32C[exampleHeader]()),
@@ -308,9 +312,8 @@ The following example shows explicit scanner cleanup for early-exit callers.
 raw := encodeRaw(0, []byte("x"))
 stream := bytes.NewReader(raw)
 pool := frame.NewPool[exampleHeader](16, 256)
-reader := frame.NewReader(stream, pool, frame.HeadersOnly)
 
-scanner := frame.NewScanner(reader)
+scanner := frame.NewScanner(stream, pool, frame.HeadersOnly)
 if scanner.Scan() {
 	fmt.Println(len(scanner.Frame().Payload))
 }

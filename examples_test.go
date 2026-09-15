@@ -82,10 +82,11 @@ func ExampleScanner() {
 
 	stream := bytes.NewReader(raw)
 	pool := frame.NewPool[exampleHeader](16, 256)
-	reader := frame.NewReader(stream, pool, frame.MaxPayloadSize)
 
 	scanner := frame.NewScanner(
-		reader,
+		stream,
+		pool,
+		frame.MaxPayloadSize,
 		frame.WithScannerValidator[exampleHeader](frame.NewCRC32C[exampleHeader]()),
 	)
 	defer scanner.Close()
@@ -133,11 +134,12 @@ func ExampleNewScanner_withOptions() {
 
 	stream := bytes.NewReader(raw)
 	pool := frame.NewPool[exampleHeader](16, 256)
-	reader := frame.NewReader(stream, pool, frame.MaxPayloadSize)
 
 	startOffset := int64(exampleHeaderSize + 2)
 	scanner := frame.NewScanner(
-		reader,
+		stream,
+		pool,
+		frame.MaxPayloadSize,
 		frame.WithScannerOffset[exampleHeader](startOffset),
 		frame.WithScannerIndex[exampleHeader](11),
 		frame.WithScannerValidator[exampleHeader](frame.NewCRC32C[exampleHeader]()),
@@ -165,9 +167,8 @@ func ExampleScanner_Close() {
 	raw := encodeRaw(0, []byte("x"))
 	stream := bytes.NewReader(raw)
 	pool := frame.NewPool[exampleHeader](16, 256)
-	reader := frame.NewReader(stream, pool, frame.HeadersOnly)
 
-	scanner := frame.NewScanner(reader)
+	scanner := frame.NewScanner(stream, pool, frame.HeadersOnly)
 	if scanner.Scan() {
 		fmt.Println(len(scanner.Frame().Payload))
 	}
