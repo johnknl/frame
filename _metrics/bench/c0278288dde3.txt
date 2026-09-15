@@ -1,0 +1,62 @@
+goos: linux
+goarch: amd64
+pkg: github.com/johnknl/frame
+cpu: AMD Ryzen 9 5950X 16-Core Processor            
+BenchmarkCRC32C_Sum-32         	25008081	        47.25 ns/op	22008.44 MB/s	       0 B/op	       0 allocs/op
+BenchmarkCRC32C_Sum-32         	24314139	        47.00 ns/op	22125.60 MB/s	       0 B/op	       0 allocs/op
+BenchmarkCRC32C_Sum-32         	25243945	        47.00 ns/op	22129.62 MB/s	       0 B/op	       0 allocs/op
+BenchmarkCRC32C_Sum-32         	24791204	        47.50 ns/op	21892.66 MB/s	       0 B/op	       0 allocs/op
+BenchmarkCRC32C_Sum-32         	25294408	        47.45 ns/op	21917.88 MB/s	       0 B/op	       0 allocs/op
+BenchmarkCRC32C_Sum-32         	25218682	        47.89 ns/op	21716.29 MB/s	       0 B/op	       0 allocs/op
+BenchmarkCRC32C_Validate-32    	22956488	        49.48 ns/op	21018.08 MB/s	       0 B/op	       0 allocs/op
+BenchmarkCRC32C_Validate-32    	22281370	        50.21 ns/op	20712.71 MB/s	       0 B/op	       0 allocs/op
+BenchmarkCRC32C_Validate-32    	24387181	        50.59 ns/op	20558.97 MB/s	       0 B/op	       0 allocs/op
+BenchmarkCRC32C_Validate-32    	23034405	        50.42 ns/op	20628.01 MB/s	       0 B/op	       0 allocs/op
+BenchmarkCRC32C_Validate-32    	24716064	        49.29 ns/op	21097.66 MB/s	       0 B/op	       0 allocs/op
+BenchmarkCRC32C_Validate-32    	22785822	        49.09 ns/op	21183.62 MB/s	       0 B/op	       0 allocs/op
+BenchmarkReaderAt_ReadAt/full_payload-32         	10914445	       105.2 ns/op	29650.33 MB/s	       0 B/op	       0 allocs/op
+BenchmarkReaderAt_ReadAt/full_payload-32         	10089283	       110.5 ns/op	28232.09 MB/s	       0 B/op	       0 allocs/op
+BenchmarkReaderAt_ReadAt/full_payload-32         	10861694	       113.5 ns/op	27491.26 MB/s	       0 B/op	       0 allocs/op
+BenchmarkReaderAt_ReadAt/full_payload-32         	10575228	       113.2 ns/op	27568.85 MB/s	       0 B/op	       0 allocs/op
+BenchmarkReaderAt_ReadAt/full_payload-32         	10381977	       113.7 ns/op	27450.04 MB/s	       0 B/op	       0 allocs/op
+BenchmarkReaderAt_ReadAt/full_payload-32         	10576550	       113.2 ns/op	27561.37 MB/s	       0 B/op	       0 allocs/op
+BenchmarkReaderAt_ReadAt/header_only_limit_zero-32         	12416751	        83.89 ns/op	 572.17 MB/s	       0 B/op	       0 allocs/op
+BenchmarkReaderAt_ReadAt/header_only_limit_zero-32         	14466096	        83.32 ns/op	 576.10 MB/s	       0 B/op	       0 allocs/op
+BenchmarkReaderAt_ReadAt/header_only_limit_zero-32         	14756235	        83.34 ns/op	 575.92 MB/s	       0 B/op	       0 allocs/op
+BenchmarkReaderAt_ReadAt/header_only_limit_zero-32         	13972532	        81.94 ns/op	 585.81 MB/s	       0 B/op	       0 allocs/op
+BenchmarkReaderAt_ReadAt/header_only_limit_zero-32         	14775252	        79.93 ns/op	 600.56 MB/s	       0 B/op	       0 allocs/op
+BenchmarkReaderAt_ReadAt/header_only_limit_zero-32         	14117534	        84.57 ns/op	 567.58 MB/s	       0 B/op	       0 allocs/op
+BenchmarkReader_Read/full_payload-32                       	10161631	       115.4 ns/op	27041.55 MB/s	       0 B/op	       0 allocs/op
+BenchmarkReader_Read/full_payload-32                       	10193130	       119.5 ns/op	26105.30 MB/s	       0 B/op	       0 allocs/op
+BenchmarkReader_Read/full_payload-32                       	10094317	       115.6 ns/op	26981.55 MB/s	       0 B/op	       0 allocs/op
+BenchmarkReader_Read/full_payload-32                       	10120288	       120.5 ns/op	25887.02 MB/s	       0 B/op	       0 allocs/op
+BenchmarkReader_Read/full_payload-32                       	10621048	       121.2 ns/op	25743.24 MB/s	       0 B/op	       0 allocs/op
+BenchmarkReader_Read/full_payload-32                       	10252131	       116.9 ns/op	26695.31 MB/s	       0 B/op	       0 allocs/op
+BenchmarkReader_Read/header_only_limit_zero-32             	 2499277	       488.1 ns/op	  98.34 MB/s	      72 B/op	       3 allocs/op
+BenchmarkReader_Read/header_only_limit_zero-32             	 2579356	       479.3 ns/op	 100.15 MB/s	      72 B/op	       3 allocs/op
+BenchmarkReader_Read/header_only_limit_zero-32             	 2498737	       481.3 ns/op	  99.72 MB/s	      72 B/op	       3 allocs/op
+BenchmarkReader_Read/header_only_limit_zero-32             	 2565980	       472.7 ns/op	 101.55 MB/s	      72 B/op	       3 allocs/op
+BenchmarkReader_Read/header_only_limit_zero-32             	 2535356	       474.7 ns/op	 101.12 MB/s	      72 B/op	       3 allocs/op
+BenchmarkReader_Read/header_only_limit_zero-32             	 2466966	       483.7 ns/op	  99.23 MB/s	      72 B/op	       3 allocs/op
+BenchmarkScanner_Scan/default-32                           	   29104	     39592 ns/op	3551.83 MB/s	       144.0 bytes/record	  25863660 records/s	       0 B/op	       0 allocs/op
+BenchmarkScanner_Scan/default-32                           	   28383	     39227 ns/op	3584.94 MB/s	       144.0 bytes/record	  26104763 records/s	       0 B/op	       0 allocs/op
+BenchmarkScanner_Scan/default-32                           	   29104	     38647 ns/op	3638.71 MB/s	       144.0 bytes/record	  26496285 records/s	       0 B/op	       0 allocs/op
+BenchmarkScanner_Scan/default-32                           	   29220	     39194 ns/op	3587.90 MB/s	       144.0 bytes/record	  26126258 records/s	       0 B/op	       0 allocs/op
+BenchmarkScanner_Scan/default-32                           	   29569	     38817 ns/op	3622.78 MB/s	       144.0 bytes/record	  26380251 records/s	       0 B/op	       0 allocs/op
+BenchmarkScanner_Scan/default-32                           	   32106	     39037 ns/op	3602.32 MB/s	       144.0 bytes/record	  26231273 records/s	       0 B/op	       0 allocs/op
+BenchmarkScanner_Scan/with_validation-32                   	   18422	     61296 ns/op	2294.19 MB/s	       144.0 bytes/record	  16705809 records/s	       0 B/op	       0 allocs/op
+BenchmarkScanner_Scan/with_validation-32                   	   20293	     61837 ns/op	2274.14 MB/s	       144.0 bytes/record	  16559769 records/s	       0 B/op	       0 allocs/op
+BenchmarkScanner_Scan/with_validation-32                   	   18914	     63467 ns/op	2215.73 MB/s	       144.0 bytes/record	  16134458 records/s	       0 B/op	       0 allocs/op
+BenchmarkScanner_Scan/with_validation-32                   	   18322	     60438 ns/op	2326.77 MB/s	       144.0 bytes/record	  16943033 records/s	       0 B/op	       0 allocs/op
+BenchmarkScanner_Scan/with_validation-32                   	   18703	     62135 ns/op	2263.24 MB/s	       144.0 bytes/record	  16480399 records/s	       0 B/op	       0 allocs/op
+BenchmarkScanner_Scan/with_validation-32                   	   18346	     60604 ns/op	2320.40 MB/s	       144.0 bytes/record	  16896606 records/s	       0 B/op	       0 allocs/op
+BenchmarkScanner_Scan/at_offset-32                         	   36589	     29481 ns/op	3577.51 MB/s	       144.0 bytes/record	  26050620 records/s	       0 B/op	       0 allocs/op
+BenchmarkScanner_Scan/at_offset-32                         	   36452	     28613 ns/op	3686.10 MB/s	       144.0 bytes/record	  26841353 records/s	       0 B/op	       0 allocs/op
+BenchmarkScanner_Scan/at_offset-32                         	   36482	     28488 ns/op	3702.27 MB/s	       144.0 bytes/record	  26959114 records/s	       0 B/op	       0 allocs/op
+BenchmarkScanner_Scan/at_offset-32                         	   37143	     28606 ns/op	3686.94 MB/s	       144.0 bytes/record	  26847443 records/s	       0 B/op	       0 allocs/op
+BenchmarkScanner_Scan/at_offset-32                         	   39801	     28373 ns/op	3717.22 MB/s	       144.0 bytes/record	  27067960 records/s	       0 B/op	       0 allocs/op
+BenchmarkScanner_Scan/at_offset-32                         	   40647	     29730 ns/op	3547.53 MB/s	       144.0 bytes/record	  25832359 records/s	       0 B/op	       0 allocs/op
+PASS
+ok  	github.com/johnknl/frame	100.595s
+?   	github.com/johnknl/frame/internal/mocks	[no test files]
+?   	github.com/johnknl/frame/internal/testutil	[no test files]
