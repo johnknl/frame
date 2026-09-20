@@ -59,9 +59,6 @@ func ReportDomainMetrics(b *testing.B, recordsPerOp int64, bytesPerOp int64) {
 	mbPerSec := float64(bytesPerOp) * opsPerSec / (1024.0 * 1024.0)
 	b.ReportMetric(recordsPerSec, "records/s")
 	b.ReportMetric(mbPerSec, "MB/s")
-	if recordsPerOp > 0 {
-		b.ReportMetric(float64(bytesPerOp)/float64(recordsPerOp), "bytes/record")
-	}
 }
 
 // BenchmarkLabelInt generates a benchmark label string in the format "prefix=n" for reporting purposes.

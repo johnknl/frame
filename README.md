@@ -4,34 +4,30 @@ Generic utilities for scanning, checksumming and pooling binary frames.
 
 ## Scanning Performance
 
-`frame` is quite efficient. The pool uses size buckets which are pre-warmed with 
-3 frames each; real-life efficiency will depend on the level of concurrency and 
-how well the payloads fit in the pool buckets. Buckets are derived from caller 
-provided maximum "poolable" payload size.
-
 The following sample benchmarks ran with:
 
 - 16B headers and 128B payloads (144B total data)
 - 1024 frames for the scanner tests
 
 _Note that `frame` scanning is not absolutely zero-allocation as these benchmarks
-seem to suggest: the pool bucket warmup was done outside of the benchmarking to
-isolate per record allocation metrics._
+seem to suggest. Not only are the pools pre-warmed with 3 frames, it never tries
+to get a value higher than the default. These benchmark serve to isolate per record 
+allocation metric, not pooling retention policy-driven allocation properties.
 
 ```
 goos: linux
 goarch: amd64
 pkg: github.com/johnknl/frame
 cpu: AMD Ryzen 9 5950X 16-Core Processor
-BenchmarkCRC32C_Sum-32          26552685                47.26 ns/op     22004.15 MB/s          0 B/op          0 allocs/op
-BenchmarkCRC32C_Validate-32     25758903                50.07 ns/op     20771.68 MB/s          0 B/op          0 allocs/op
-BenchmarkReaderAt_ReadAt/full_payload-32              11100940               100.7 ns/op     30982.10 MB/s          0 B/op          0 allocs/op
-BenchmarkReaderAt_ReadAt/header_only_limit_zero-32    16533049                70.92 ns/op      676.81 MB/s          0 B/op          0 allocs/op
-BenchmarkReader_Read/full_payload-32                   9904148               119.0 ns/op     26212.07 MB/s          0 B/op          0 allocs/op
-BenchmarkReader_Read/header_only_limit_zero-32         2506723               480.3 ns/op        99.95 MB/s         72 B/op          3 allocs/op
-BenchmarkScanner_Scan/default-32                           37875             32604 ns/op        4313.12 MB/s           144.0 bytes/record         31407155 records/s           0 B/op          0 allocs/op
-BenchmarkScanner_Scan/with_validation-32                   21217             56965 ns/op        2468.64 MB/s           144.0 bytes/record         17976106 records/s           0 B/op          0 allocs/op
-BenchmarkScanner_Scan/at_offset-32                         51880             24855 ns/op        4243.32 MB/s           144.0 bytes/record         30898947 records/s           0 B/op          0 allocs/op
+BenchmarkCRC32C_Sum-32          24558889                45.78 ns/op     22718.00 MB/s          0 B/op          0 allocs/op
+BenchmarkCRC32C_Validate-32     22768965                48.79 ns/op     21315.62 MB/s          0 B/op          0 allocs/op
+BenchmarkReaderAt_ReadAt/full_payload-32              11529084               100.3 ns/op     31094.09 MB/s          0 B/op          0 allocs/op
+BenchmarkReaderAt_ReadAt/header_only_limit_zero-32    18123859                63.16 ns/op      759.92 MB/s          0 B/op          0 allocs/op
+BenchmarkReader_Read/full_payload-32                  10247882               111.2 ns/op     28065.62 MB/s          0 B/op          0 allocs/op
+BenchmarkReader_Read/header_only_limit_zero-32        11729889                99.92 ns/op      480.37 MB/s          0 B/op          0 allocs/op
+BenchmarkScanner_Scan/default-32                         32208             33286 ns/op        4224.70 MB/s          30763314 records/s          0 B/op          0 allocs/op
+BenchmarkScanner_Scan/with_validation-32                 19544             59186 ns/op        2376.00 MB/s          17301529 records/s          0 B/op          0 allocs/op
+BenchmarkScanner_Scan/at_offset-32                       43540             25517 ns/op        4133.28 MB/s          30097596 records/s          0 B/op          0 allocs/op
 PASS
 ```
 
@@ -118,7 +114,7 @@ Go reference: [NewPool](https://pkg.go.dev/github.com/johnknl/frame#NewPool).
 The following example shows borrowing and returning frames through Pool.
 
 ```go
-pool := frame.NewPool[exampleHeader](64, 1024)
+pool := frame.NewPool[exampleHeader](frame.NewDefaultRetentionPolicy(exampleMaxPayload))
 payload := []byte("ok")
 var h exampleHeader
 binary.BigEndian.PutUint32(h[0:4], uint32(len(payload)))
@@ -210,7 +206,7 @@ raw = append(raw, encode(0, []byte("a"))...)
 raw = append(raw, encode(1, []byte("bc"))...)
 
 stream := bytes.NewReader(raw)
-pool := frame.NewPool[exampleHeader](16, 256)
+pool := frame.NewPool[exampleHeader](frame.NewDefaultRetentionPolicy(exampleMaxPayload))
 
 scanner := frame.NewScanner(
 	stream,
@@ -271,7 +267,7 @@ raw = append(raw, encode(11, []byte("bb"))...)
 raw = append(raw, encode(12, []byte("cc"))...)
 
 stream := bytes.NewReader(raw)
-pool := frame.NewPool[exampleHeader](16, 256)
+pool := frame.NewPool[exampleHeader](frame.NewDefaultRetentionPolicy(exampleMaxPayload))
 
 startOffset := int64(exampleHeaderSize + 2)
 scanner := frame.NewScanner(
@@ -311,7 +307,7 @@ The following example shows explicit scanner cleanup for early-exit callers.
 ```go
 raw := encodeRaw(0, []byte("x"))
 stream := bytes.NewReader(raw)
-pool := frame.NewPool[exampleHeader](16, 256)
+pool := frame.NewPool[exampleHeader](frame.NewDefaultRetentionPolicy(exampleMaxPayload))
 
 scanner := frame.NewScanner(stream, pool, frame.HeadersOnly)
 if scanner.Scan() {

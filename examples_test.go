@@ -30,7 +30,10 @@ import (
 	"github.com/johnknl/frame"
 )
 
-const exampleHeaderSize = 16
+const (
+	exampleHeaderSize = 16
+	exampleMaxPayload = 2048
+)
 
 type exampleHeader [exampleHeaderSize]byte
 
@@ -81,7 +84,7 @@ func ExampleScanner() {
 	raw = append(raw, encode(1, []byte("bc"))...)
 
 	stream := bytes.NewReader(raw)
-	pool := frame.NewPool[exampleHeader](16, 256)
+	pool := frame.NewPool[exampleHeader](frame.NewDefaultRetentionPolicy(exampleMaxPayload))
 
 	scanner := frame.NewScanner(
 		stream,
@@ -133,7 +136,7 @@ func ExampleNewScanner_withOptions() {
 	raw = append(raw, encode(12, []byte("cc"))...)
 
 	stream := bytes.NewReader(raw)
-	pool := frame.NewPool[exampleHeader](16, 256)
+	pool := frame.NewPool[exampleHeader](frame.NewDefaultRetentionPolicy(exampleMaxPayload))
 
 	startOffset := int64(exampleHeaderSize + 2)
 	scanner := frame.NewScanner(
@@ -166,7 +169,7 @@ func ExampleNewScanner_withOptions() {
 func ExampleScanner_Close() {
 	raw := encodeRaw(0, []byte("x"))
 	stream := bytes.NewReader(raw)
-	pool := frame.NewPool[exampleHeader](16, 256)
+	pool := frame.NewPool[exampleHeader](frame.NewDefaultRetentionPolicy(exampleMaxPayload))
 
 	scanner := frame.NewScanner(stream, pool, frame.HeadersOnly)
 	if scanner.Scan() {
@@ -186,7 +189,7 @@ func ExampleScanner_Close() {
 // Payload slices are reset when a frame is returned, allowing
 // callers to reuse allocations across reads and writes.
 func ExampleNewPool() {
-	pool := frame.NewPool[exampleHeader](64, 1024)
+	pool := frame.NewPool[exampleHeader](frame.NewDefaultRetentionPolicy(exampleMaxPayload))
 	payload := []byte("ok")
 	var h exampleHeader
 	binary.BigEndian.PutUint32(h[0:4], uint32(len(payload)))

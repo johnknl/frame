@@ -27,52 +27,87 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestBuildPayloadBucketCaps(t *testing.T) {
+func TestNewDefaultRetentionPolicy(t *testing.T) {
 	t.Parallel()
 
-	require.Equal(t, []int{4, 8, 16, 32, 64, 128, 256, 512, 1024}, buildPayloadBucketCaps(4, 1024))
-	require.Equal(t, []int{64}, buildPayloadBucketCaps(64, 64))
-	require.Equal(t, []int{96, 192, 384, 768, 1024}, buildPayloadBucketCaps(96, 1024))
+	pol := NewDefaultRetentionPolicy(1024)
+
+	require.Equal(t, 3, pol.Warmup)
+	require.Equal(t, 256, pol.Threshold)
+	require.Equal(t, 0.5, pol.Ratio)
+	require.Equal(t, 1024, pol.Max)
+	require.Equal(t, 512, pol.Default)
 }
 
-func TestPool_GetSelectsBucketByPayloadSize(t *testing.T) {
+func TestRetentionPolicy_Retainable(t *testing.T) {
 	t.Parallel()
 
-	p := NewTestPool(64, 1024)
+	pol := &RetentionPolicy{Max: 64}
 
-	f := p.Get(65)
-	require.Equal(t, 65, len(f.Payload))
-	require.Equal(t, 128, cap(f.Payload))
-	f.Return()
-
-	f = p.Get(1024)
-	require.Equal(t, 1024, len(f.Payload))
-	require.Equal(t, 1024, cap(f.Payload))
-	f.Return()
+	require.True(t, pol.Retainable(0))
+	require.True(t, pol.Retainable(64))
+	require.False(t, pol.Retainable(65))
 }
 
-func TestPool_GetOverMaxNotRetained(t *testing.T) {
+func TestRetentionPolicy_Reusable(t *testing.T) {
 	t.Parallel()
 
-	p := NewTestPool(64, 1024)
+	pol := &RetentionPolicy{Threshold: 4, Ratio: 0.25}
 
-	f := p.Get(2048)
-	require.Equal(t, 2048, len(f.Payload))
-	require.GreaterOrEqual(t, cap(f.Payload), 2048)
-	require.Equal(t, -1, p.payloadBucketForCap(cap(f.Payload)))
-	f.Return()
+	tests := []struct {
+		name     string
+		capacity int
+		need     int
+		want     bool
+	}{
+		{name: "capacity smaller than need", capacity: 7, need: 8, want: false},
+		{name: "capacity delta within threshold", capacity: 12, need: 8, want: true},
+		{name: "capacity delta above threshold but ratio within bound", capacity: 12, need: 9, want: true},
+		{name: "capacity delta above threshold and ratio above bound", capacity: 16, need: 8, want: false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			require.Equal(t, tt.want, pol.Reusable(tt.capacity, tt.need))
+		})
+	}
 }
 
-func TestPool_ReturnReusesFrameFromSameBucket(t *testing.T) {
+func TestPool_Get_UsesReusablePolicy(t *testing.T) {
 	t.Parallel()
 
-	p := NewTestPool(64, 1024)
+	pol := &RetentionPolicy{
+		Warmup:    0,
+		Threshold: 4,
+		Ratio:     0.25,
+		Max:       64,
+		Default:   16,
+	}
 
-	f := p.Get(200)
-	require.Equal(t, 256, cap(f.Payload))
-	f.Return()
+	p := NewPool[TestHeader](pol)
+	f := p.Get(8)
 
-	g := p.Get(200)
-	require.Equal(t, 256, cap(g.Payload))
-	g.Return()
+	require.NotNil(t, f)
+	require.Equal(t, 8, len(f.Payload))
+	require.Nil(t, f.pool)
+}
+
+func TestPool_Get_RetainsWhenReusable(t *testing.T) {
+	t.Parallel()
+
+	pol := &RetentionPolicy{
+		Warmup:    0,
+		Threshold: 16,
+		Ratio:     0.25,
+		Max:       64,
+		Default:   16,
+	}
+
+	p := NewPool[TestHeader](pol)
+	f := p.Get(8)
+
+	require.NotNil(t, f)
+	require.Equal(t, 8, len(f.Payload))
+	require.Equal(t, p, f.pool)
 }

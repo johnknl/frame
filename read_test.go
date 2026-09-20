@@ -45,7 +45,7 @@ func TestReader_Read(t *testing.T) {
 	_, err = f.Write(payload)
 	require.NoError(t, err)
 
-	r := NewReaderAt(f, NewTestPool(4, 1024), MaxPayloadSize)
+	r := NewReaderAt(f, NewTestPool(1024), MaxPayloadSize)
 	b, err := r.ReadAt(0)
 	require.NoError(t, err)
 	require.Equal(t, uint32(0), b.Header.Index())
@@ -68,7 +68,7 @@ func TestReader_ReadLimitZeroReturnsEmptyPayload(t *testing.T) {
 	_, err = f.Write(payload)
 	require.NoError(t, err)
 
-	r := NewReaderAt(f, NewTestPool(4, 1024), 0)
+	r := NewReaderAt(f, NewTestPool(1024), 0)
 	b, err := r.ReadAt(0)
 	require.NoError(t, err)
 	require.Equal(t, uint32(0), b.Header.Index())

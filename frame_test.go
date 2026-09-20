@@ -23,8 +23,8 @@ package frame
 
 type TestPool = Pool[TestHeader]
 
-func NewTestPool(defaultSize, maxRetainedSize int) *TestPool {
-	return NewPool[TestHeader](defaultSize, maxRetainedSize)
+func NewTestPool(defaultSize int) *TestPool {
+	return NewPool[TestHeader](NewDefaultRetentionPolicy(defaultSize * 2))
 }
 
 func NewTestFrame(meta uint32, payload []byte) *Frame[TestHeader] {

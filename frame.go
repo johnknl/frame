@@ -25,10 +25,9 @@ import "bytes"
 
 // Frame is a wrapper around a byte slice that is borrowed from a pool.
 type Frame[HT Header] struct {
-	Header        HT
-	pool          *Pool[HT]
-	Payload       []byte
-	payloadBucket int
+	Header  HT
+	pool    *Pool[HT]
+	Payload []byte
 }
 
 // Clone copies the borrowed value into a new slice and returns it along with the header.

@@ -47,34 +47,10 @@ type ReaderAt[HT Header] struct {
 	headerSize int
 }
 
-// Reader is a reader that uses a pool of borrowed values to avoid allocations.
-type Reader[HT Header] struct {
-	r          io.Reader
-	pool       *Pool[HT]
-	header     HT
-	headerView []byte
-	limit      uint32
-	headerSize int
-}
-
 // NewReaderAt creates a new BorrowedFrameReader with the given stream and pool.
 // The limit parameter specifies the maximum number of bytes to read for the payload.
 func NewReaderAt[HT Header](src io.ReaderAt, pool *Pool[HT], limit PayloadReadLimit) *ReaderAt[HT] {
 	r := &ReaderAt[HT]{
-		r:     src,
-		pool:  pool,
-		limit: uint32(limit),
-	}
-	r.headerSize = len(r.header)
-	r.headerView = headerBytes(&r.header)
-
-	return r
-}
-
-// NewReader creates a new BorrowedFrameReader with the given stream and pool.
-// The limit parameter specifies the maximum number of bytes to read for the payload.
-func NewReader[HT Header](src io.Reader, pool *Pool[HT], limit PayloadReadLimit) *Reader[HT] {
-	r := &Reader[HT]{
 		r:     src,
 		pool:  pool,
 		limit: uint32(limit),
@@ -115,6 +91,31 @@ func (r *ReaderAt[HT]) ReadAt(offset int64) (f *Frame[HT], err error) {
 	return f, err
 }
 
+// Reader is a reader that uses a pool of borrowed values to avoid allocations.
+type Reader[HT Header] struct {
+	r          io.Reader
+	header     HT
+	pool       *Pool[HT]
+	headerView []byte
+	discard    []byte
+	headerSize int
+	limit      uint32
+}
+
+// NewReader creates a new BorrowedFrameReader with the given stream and pool.
+// The limit parameter specifies the maximum number of bytes to read for the payload.
+func NewReader[HT Header](src io.Reader, pool *Pool[HT], limit PayloadReadLimit) *Reader[HT] {
+	r := &Reader[HT]{
+		r:     src,
+		pool:  pool,
+		limit: uint32(limit),
+	}
+	r.headerSize = len(r.header)
+	r.headerView = headerBytes(&r.header)
+
+	return r
+}
+
 // Read reads the next frame header and payload from the stream,
 // and returns a borrowed value from the pool.
 func (r *Reader[HT]) Read() (f *Frame[HT], err error) {
@@ -134,18 +135,29 @@ func (r *Reader[HT]) Read() (f *Frame[HT], err error) {
 		}
 	}()
 
-	if n > 0 {
-		err = readFull(r.r, f.Payload)
-		if err != nil {
-			return nil, err
+	if n == 0 {
+		if r.discard == nil {
+			r.discard = make([]byte, 1024)
 		}
+
+		var toDiscard = int(payloadLen)
+
+		for toDiscard > 0 {
+			maxRead := min(len(r.discard), toDiscard)
+			nD, errD := r.r.Read(r.discard[:maxRead])
+			if errD != nil {
+				return nil, errD
+			}
+
+			toDiscard -= nD
+		}
+
+		return f, nil
 	}
 
-	if payloadLen > n {
-		_, err = io.CopyN(io.Discard, r.r, int64(payloadLen-n))
-		if err != nil {
-			return nil, err
-		}
+	err = readFull(r.r, f.Payload)
+	if err != nil {
+		return nil, err
 	}
 
 	return f, nil

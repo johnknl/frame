@@ -66,7 +66,7 @@ func BenchmarkReaderAt_ReadAt(b *testing.B) {
 		payload := testutil.BenchmarkPayload(1024)
 		raw := buildSingleFrameCorpus(0, payload)
 		r := bytes.NewReader(raw)
-		reader := NewReaderAt(r, NewTestPool(len(payload), len(payload)), MaxPayloadSize)
+		reader := NewReaderAt(r, NewTestPool(len(payload)), MaxPayloadSize)
 
 		b.SetBytes(int64((TestHeaderSize + len(payload)) * repeats))
 		b.ResetTimer()
@@ -88,7 +88,7 @@ func BenchmarkReaderAt_ReadAt(b *testing.B) {
 		payload := testutil.BenchmarkPayload(1024)
 		raw := buildSingleFrameCorpus(0, payload)
 		r := bytes.NewReader(raw)
-		reader := NewReaderAt(r, NewTestPool(len(payload), len(payload)), HeadersOnly)
+		reader := NewReaderAt(r, NewTestPool(len(payload)), HeadersOnly)
 
 		b.SetBytes(int64(TestHeaderSize * repeats))
 		b.ResetTimer()
@@ -112,7 +112,7 @@ func BenchmarkReader_Read(b *testing.B) {
 		payload := testutil.BenchmarkPayload(1024)
 		raw := buildFrameCorpusFrom(repeats, len(payload), 0)
 		r := bytes.NewReader(raw)
-		reader := NewReader(r, NewTestPool(len(payload), len(payload)), MaxPayloadSize)
+		reader := NewReader(r, NewTestPool(len(payload)), MaxPayloadSize)
 
 		b.SetBytes(int64((TestHeaderSize + len(payload)) * repeats))
 		b.ResetTimer()
@@ -139,7 +139,7 @@ func BenchmarkReader_Read(b *testing.B) {
 		payload := testutil.BenchmarkPayload(1024)
 		raw := buildFrameCorpusFrom(repeats, len(payload), 0)
 		r := bytes.NewReader(raw)
-		reader := NewReader(r, NewTestPool(len(payload), len(payload)), HeadersOnly)
+		reader := NewReader(r, NewTestPool(len(payload)), HeadersOnly)
 
 		b.SetBytes(int64(TestHeaderSize * repeats))
 		b.ResetTimer()
@@ -186,7 +186,7 @@ func benchScanner(b *testing.B, skip int, validate bool) {
 	buf := buildFrameCorpusFrom(scannerFrameCount, scannerPayloadSize, 0)
 	startOffset := int64(skip * (TestHeaderSize + scannerPayloadSize))
 	stream := bytes.NewReader(buf)
-	pool := NewTestPool(scannerPayloadSize, scannerPayloadSize)
+	pool := NewTestPool(scannerPayloadSize)
 	var options []ScannerOption[TestHeader]
 	options = append(options,
 		WithScannerOffset[TestHeader](startOffset),

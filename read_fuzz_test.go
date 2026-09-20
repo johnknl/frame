@@ -52,7 +52,7 @@ func FuzzReader_Read(f *testing.F) {
 		require.NoError(t, err)
 		t.Cleanup(func() { require.NoError(t, file.Close()) })
 
-		r := NewReaderAt(file, NewTestPool(64, 1<<20), MaxPayloadSize)
+		r := NewReaderAt(file, NewTestPool(1<<20), MaxPayloadSize)
 
 		// keep reads within the fuzzed file bounds
 		off := frameFuzzNormalizeOffset(offset, len(raw))
@@ -94,7 +94,7 @@ func FuzzFrame_RoundTrip(f *testing.F) {
 		require.NoError(t, err)
 		t.Cleanup(func() { require.NoError(t, file.Close()) })
 
-		fr, err := NewReaderAt(file, NewTestPool(64, 1<<20), MaxPayloadSize).ReadAt(0)
+		fr, err := NewReaderAt(file, NewTestPool(1<<20), MaxPayloadSize).ReadAt(0)
 		require.NoError(t, err)
 		t.Cleanup(fr.Return)
 
